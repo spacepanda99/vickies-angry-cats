@@ -125,6 +125,7 @@ const sfx = {
     }
     if (this.ac && this.ac.state === 'suspended') this.ac.resume();
     this.loadSample('win', 'jingle-win.ogg');
+    this.loadSample('lose', 'jingle-lose.ogg');
   },
   ok() { return this.on && this.ac; },
   env(t, dur, vol) {
@@ -180,7 +181,10 @@ const sfx = {
     if (this.playSample('win', 0.8)) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13));
   },
-  lose() { [392, 330, 262].forEach((f, i) => this.tone('sawtooth', f, f * 0.97, 0.3, 0.06, i * 0.22)); },
+  lose() {
+    if (this.playSample('lose', 1)) return;
+    [392, 330, 262].forEach((f, i) => this.tone('sawtooth', f, f * 0.97, 0.3, 0.06, i * 0.22));
+  },
 };
 
 // ---------------------------------------------------------------- music (Vickie's Gemini tracks)
@@ -510,7 +514,7 @@ function updatePhase() {
       else { phase = 'out'; outTimer = 150; }
     }
   } else if (phase === 'out') {
-    if (--outTimer <= 0) { state = 'lost'; sfx.lose(); music.duck(2); }
+    if (--outTimer <= 0) { state = 'lost'; sfx.lose(); music.duck(2.6); }
   }
 }
 

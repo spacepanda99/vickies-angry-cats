@@ -45,13 +45,13 @@ const CATS = {
           power: 'prance', hint: 'Tap to prance!' },
 };
 
-// Which recorded cat noise plays when. All the clips are in sounds/ (audition them on sounds.html);
+// Which recorded cat noise plays when (clips cut from "The two talking cats"). All the clips are in sounds/ (audition them on sounds.html);
 // swap names here to change a sound.
 const CAT_SOUNDS = {
-  launch: { baby: 'mew-1', cece: 'big-meow-1', cleo: 'meow-1' },
-  power: { baby: 'chirp-1', cece: 'hiss-1', cleo: 'chirp-2' },
-  chatter: { baby: ['mew-4', 'mew-5', 'chirp-3'], cece: ['mrrow', 'meow-5', 'big-meow-4'], cleo: ['meow-7', 'mew-6', 'meow-8'] },
-  win: 'mew-2', lose: 'sad-meow', snap: 'mrrow',
+  launch: { baby: 'meow-7', cece: 'meow-12', cleo: 'meow-6' },
+  power: { baby: 'chirp-1', cece: 'meow-9', cleo: 'chirp-5' },
+  chatter: { baby: ['chirp-4', 'chirp-6', 'chirp-13'], cece: ['meow-10', 'chirp-11', 'meow-3'], cleo: ['meow-2', 'chirp-9', 'meow-4'] },
+  win: 'meow-11', lose: 'meow-10', snap: 'meow-5',
 };
 function catSoundFiles() {
   const s = new Set();

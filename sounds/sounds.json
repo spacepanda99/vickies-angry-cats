@@ -1,226 +1,198 @@
 [
  {
-  "name": "mew-1",
-  "label": "kitten mew (high)",
-  "seconds": 0.7,
-  "pitch": 1143,
-  "sourceAt": 63.84
- },
- {
-  "name": "mew-2",
-  "label": "kitten mew",
-  "seconds": 0.88,
-  "pitch": 1000,
-  "sourceAt": 66.14
- },
- {
-  "name": "mew-3",
-  "label": "kitten mew",
-  "seconds": 0.88,
-  "pitch": 1067,
-  "sourceAt": 67.24
- },
- {
-  "name": "mew-4",
-  "label": "short mew",
-  "seconds": 0.62,
-  "pitch": 667,
-  "sourceAt": 85.9
- },
- {
-  "name": "mew-5",
-  "label": "short mew",
-  "seconds": 0.6,
-  "pitch": 762,
-  "sourceAt": 86.92
- },
- {
-  "name": "mew-6",
-  "label": "soft mew",
-  "seconds": 0.7,
-  "pitch": 640,
-  "sourceAt": 81.4
- },
- {
-  "name": "mew-7",
-  "label": "short mew",
-  "seconds": 0.7,
-  "pitch": 762,
-  "sourceAt": 520.68
- },
- {
-  "name": "mew-8",
-  "label": "soft mew",
-  "seconds": 0.96,
-  "pitch": 762,
-  "sourceAt": 361.08
- },
- {
-  "name": "mew-9",
-  "label": "soft mew",
-  "seconds": 0.98,
-  "pitch": 762,
-  "sourceAt": 367.8
- },
- {
-  "name": "mew-10",
-  "label": "soft mew",
-  "seconds": 0.98,
-  "pitch": 762,
-  "sourceAt": 73.48
- },
- {
   "name": "meow-1",
   "label": "meow",
-  "seconds": 0.9,
-  "pitch": 727,
-  "sourceAt": 92.78
+  "seconds": 0.76,
+  "pitch": 516,
+  "sourceAt": 0.34
  },
  {
   "name": "meow-2",
   "label": "meow",
-  "seconds": 0.86,
-  "pitch": 727,
-  "sourceAt": 94.06
+  "seconds": 0.64,
+  "pitch": 552,
+  "sourceAt": 3.4
  },
  {
   "name": "meow-3",
   "label": "meow",
-  "seconds": 0.9,
-  "pitch": 667,
-  "sourceAt": 95.32
+  "seconds": 0.6,
+  "pitch": 500,
+  "sourceAt": 5.3
  },
  {
   "name": "meow-4",
   "label": "meow",
-  "seconds": 0.98,
+  "seconds": 0.62,
   "pitch": 552,
-  "sourceAt": 313.64
+  "sourceAt": 8.38
  },
  {
   "name": "meow-5",
   "label": "meow",
-  "seconds": 1.28,
-  "pitch": 516,
-  "sourceAt": 325.66
+  "seconds": 0.6,
+  "pitch": 552,
+  "sourceAt": 9.66
  },
  {
   "name": "meow-6",
   "label": "meow",
-  "seconds": 1.68,
-  "pitch": 615,
-  "sourceAt": 515.54
+  "seconds": 0.6,
+  "pitch": 533,
+  "sourceAt": 15.54
  },
  {
   "name": "meow-7",
-  "label": "meow",
-  "seconds": 0.86,
-  "pitch": 640,
-  "sourceAt": 531.88
+  "label": "higher meow",
+  "seconds": 0.84,
+  "pitch": 696,
+  "sourceAt": 18.5
  },
  {
   "name": "meow-8",
   "label": "meow",
+  "seconds": 0.62,
+  "pitch": 533,
+  "sourceAt": 19.7
+ },
+ {
+  "name": "meow-9",
+  "label": "meow",
   "seconds": 0.92,
-  "pitch": 696,
-  "sourceAt": 535.46
- },
- {
-  "name": "big-meow-1",
-  "label": "lower meow",
-  "seconds": 1.36,
-  "pitch": 410,
-  "sourceAt": 88
- },
- {
-  "name": "big-meow-2",
-  "label": "long low meow",
-  "seconds": 2.56,
-  "pitch": 320,
-  "sourceAt": 412.04
- },
- {
-  "name": "big-meow-3",
-  "label": "long meow",
-  "seconds": 2.48,
-  "pitch": 356,
-  "sourceAt": 401.86
- },
- {
-  "name": "big-meow-4",
-  "label": "long meow",
-  "seconds": 1.98,
-  "pitch": 471,
-  "sourceAt": 144.44
- },
- {
-  "name": "sad-meow",
-  "label": "low short meow",
-  "seconds": 0.82,
-  "pitch": 400,
-  "sourceAt": 89.54
- },
- {
-  "name": "mrrow",
-  "label": "rough mrrow",
-  "seconds": 1.2,
   "pitch": 500,
-  "sourceAt": 78.54
+  "sourceAt": 20.44
+ },
+ {
+  "name": "meow-10",
+  "label": "lower meow",
+  "seconds": 0.82,
+  "pitch": 471,
+  "sourceAt": 32.54
+ },
+ {
+  "name": "meow-11",
+  "label": "meow",
+  "seconds": 0.8,
+  "pitch": 516,
+  "sourceAt": 34.82
+ },
+ {
+  "name": "meow-12",
+  "label": "long meow",
+  "seconds": 1.44,
+  "pitch": 500,
+  "sourceAt": 36.18
  },
  {
   "name": "chirp-1",
   "label": "chirp",
-  "seconds": 0.48,
-  "pitch": 842,
-  "sourceAt": 85.3
+  "seconds": 0.4,
+  "pitch": 533,
+  "sourceAt": 1.42
  },
  {
   "name": "chirp-2",
-  "label": "chirp",
+  "label": "lower chirp",
   "seconds": 0.44,
-  "pitch": 696,
-  "sourceAt": 377.76
+  "pitch": 372,
+  "sourceAt": 1.98
  },
  {
   "name": "chirp-3",
   "label": "chirp",
-  "seconds": 0.4,
-  "pitch": 727,
-  "sourceAt": 538.58
+  "seconds": 0.48,
+  "pitch": 500,
+  "sourceAt": 6.4
  },
  {
   "name": "chirp-4",
-  "label": "high chirp",
-  "seconds": 0.5,
-  "pitch": 1600,
-  "sourceAt": 11.4
+  "label": "chirp",
+  "seconds": 0.32,
+  "pitch": 533,
+  "sourceAt": 11.02
  },
  {
   "name": "chirp-5",
   "label": "chirp",
   "seconds": 0.54,
-  "pitch": 471,
-  "sourceAt": 59.96
+  "pitch": 516,
+  "sourceAt": 12.66
  },
  {
   "name": "chirp-6",
   "label": "chirp",
-  "seconds": 0.44,
-  "pitch": 500,
-  "sourceAt": 113.32
+  "seconds": 0.34,
+  "pitch": 516,
+  "sourceAt": 16.7
  },
  {
-  "name": "hiss-1",
-  "label": "hiss",
+  "name": "chirp-7",
+  "label": "chirp",
+  "seconds": 0.46,
+  "pitch": 533,
+  "sourceAt": 21.86
+ },
+ {
+  "name": "chirp-8",
+  "label": "lower chirp",
+  "seconds": 0.34,
+  "pitch": 471,
+  "sourceAt": 22.44
+ },
+ {
+  "name": "chirp-9",
+  "label": "chirp",
+  "seconds": 0.48,
+  "pitch": 516,
+  "sourceAt": 23.7
+ },
+ {
+  "name": "chirp-10",
+  "label": "lower chirp",
+  "seconds": 0.36,
+  "pitch": 485,
+  "sourceAt": 24.36
+ },
+ {
+  "name": "chirp-11",
+  "label": "lower chirp",
+  "seconds": 0.54,
+  "pitch": 471,
+  "sourceAt": 25.6
+ },
+ {
+  "name": "chirp-12",
+  "label": "lower chirp",
+  "seconds": 0.38,
+  "pitch": 471,
+  "sourceAt": 28.32
+ },
+ {
+  "name": "chirp-13",
+  "label": "chirp",
+  "seconds": 0.5,
+  "pitch": 516,
+  "sourceAt": 29.16
+ },
+ {
+  "name": "chirp-14",
+  "label": "lower chirp",
   "seconds": 0.42,
-  "pitch": 593,
-  "sourceAt": 30.16
+  "pitch": 485,
+  "sourceAt": 30.8
  },
  {
-  "name": "hiss-2",
-  "label": "hiss",
-  "seconds": 0.32,
-  "pitch": 410,
-  "sourceAt": 117.78
+  "name": "chirp-15",
+  "label": "lower chirp",
+  "seconds": 0.4,
+  "pitch": 485,
+  "sourceAt": 39.78
+ },
+ {
+  "name": "chirp-16",
+  "label": "lower chirp",
+  "seconds": 0.38,
+  "pitch": 485,
+  "sourceAt": 40.62
  }
 ]

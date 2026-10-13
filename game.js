@@ -164,6 +164,65 @@ const sfx = {
   lose() { [392, 330, 262].forEach((f, i) => this.tone('sawtooth', f, f * 0.97, 0.3, 0.06, i * 0.22)); },
 };
 
+// ---------------------------------------------------------------- music (Vickie's Gemini tracks)
+// Each file plays its intro once, then loops loopStart..loopEnd. Loop points were picked by matching
+// the music on both sides of the seam, and a short crossfade is baked into the file just before loopEnd.
+const MUSIC = {
+  menu: { url: 'music-menu.ogg', loopStart: 17.1726, loopEnd: 52.0824 },
+  game: { url: 'music-game.ogg', loopStart: 36.3431, loopEnd: 116.3784 },
+};
+const AUDIO_KEY = 'vickiesAngryCats.audio';
+const music = {
+  on: true, volume: 0.35, gain: null, buffers: {}, loading: {}, current: null,
+  ensure() {
+    if (this.gain || !sfx.ac) return;
+    this.gain = sfx.ac.createGain();
+    this.gain.gain.value = this.on ? this.volume : 0;
+    this.gain.connect(sfx.ac.destination);
+  },
+  load(name) {
+    if (this.buffers[name] || this.loading[name]) return;
+    this.loading[name] = fetch(MUSIC[name].url).then(r => r.arrayBuffer())
+      .then(b => new Promise((res, rej) => sfx.ac.decodeAudioData(b, res, rej)))
+      .then(buf => { this.buffers[name] = buf; })
+      .catch(() => { /* offline or unsupported: play on without music */ });
+  },
+  // called every frame: switches tracks to match the screen, crossfading over about a second
+  update() {
+    if (!sfx.ac) return;
+    this.ensure();
+    const want = state === 'menu' || state === 'levels' ? 'menu' : 'game';
+    this.load(want);
+    if (this.buffers[want]) this.load(want === 'menu' ? 'game' : 'menu');
+    if ((this.current && this.current.name === want) || !this.buffers[want]) return;
+    const t = sfx.ac.currentTime;
+    if (this.current) { const old = this.current; old.g.gain.setTargetAtTime(0, t, 0.25); old.src.stop(t + 1.5); }
+    const src = sfx.ac.createBufferSource(), g = sfx.ac.createGain();
+    src.buffer = this.buffers[want]; src.loop = true;
+    src.loopStart = MUSIC[want].loopStart; src.loopEnd = MUSIC[want].loopEnd;
+    g.gain.setValueAtTime(0.0001, t); g.gain.setTargetAtTime(1, t, 0.3);
+    src.connect(g); g.connect(this.gain); src.start(t);
+    this.current = { name: want, src, g };
+  },
+  setVolume(v, tc) { if (this.gain) { const t = sfx.ac.currentTime; this.gain.gain.cancelScheduledValues(t); this.gain.gain.setTargetAtTime(v, t, tc); } },
+  toggle() { this.on = !this.on; this.setVolume(this.on ? this.volume : 0, 0.1); saveAudio(); },
+  // dip the music while a win/lose jingle plays
+  duck(sec) {
+    if (!this.gain || !this.on) return;
+    const t = sfx.ac.currentTime;
+    this.gain.gain.cancelScheduledValues(t);
+    this.gain.gain.setTargetAtTime(this.volume * 0.25, t, 0.05);
+    this.gain.gain.setTargetAtTime(this.volume, t + sec, 0.5);
+  },
+};
+function saveAudio() { try { localStorage.setItem(AUDIO_KEY, JSON.stringify({ music: music.on, sfx: sfx.on })); } catch (e) { /* private mode */ } }
+try { const a = JSON.parse(localStorage.getItem(AUDIO_KEY)); if (a) { music.on = a.music !== false; sfx.on = a.sfx !== false; } } catch (e) { /* defaults */ }
+// stop the music when the phone goes to the home screen or locks
+document.addEventListener('visibilitychange', () => {
+  if (!sfx.ac) return;
+  if (document.hidden) sfx.ac.suspend(); else sfx.ac.resume();
+});
+
 // ---------------------------------------------------------------- game state
 
 let engine = null;
@@ -432,7 +491,7 @@ function updatePhase() {
       else { phase = 'out'; outTimer = 150; }
     }
   } else if (phase === 'out') {
-    if (--outTimer <= 0) { state = 'lost'; sfx.lose(); }
+    if (--outTimer <= 0) { state = 'lost'; sfx.lose(); music.duck(2); }
   }
 }
 
@@ -444,7 +503,7 @@ function finishWin() {
   bestStars[levelIdx] = Math.max(bestStars[levelIdx] || 0, stars);
   saveStars();
   state = 'won';
-  sfx.win();
+  sfx.win(); music.duck(2.5);
 }
 
 // ---------------------------------------------------------------- camera
@@ -580,6 +639,13 @@ function iconButton(kind, x, y, action) {
     ctx.lineTo(x - 7, y + 6); ctx.lineTo(x - 14, y + 6); ctx.closePath(); ctx.fill();
     if (sfx.on) { ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(x + 4, y, 8, -0.8, 0.8); ctx.stroke(); ctx.beginPath(); ctx.arc(x + 4, y, 14, -0.8, 0.8); ctx.stroke(); }
     else { ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(x + 7, y - 7); ctx.lineTo(x + 17, y + 7); ctx.moveTo(x + 17, y - 7); ctx.lineTo(x + 7, y + 7); ctx.stroke(); }
+  } else if (kind === 'music') {
+    // two beamed notes, crossed out when the music is off
+    ctx.beginPath(); ctx.ellipse(x - 9, y + 9, 6, 4.5, -0.4, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x + 9, y + 5, 6, 4.5, -0.4, 0, 7); ctx.fill();
+    ctx.lineWidth = 3.5;
+    ctx.beginPath(); ctx.moveTo(x - 4, y + 8); ctx.lineTo(x - 4, y - 12); ctx.lineTo(x + 14, y - 16); ctx.lineTo(x + 14, y + 4); ctx.stroke();
+    if (!music.on) { ctx.strokeStyle = '#d6303c'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x - 18, y - 18); ctx.lineTo(x + 18, y + 18); ctx.stroke(); }
   } else if (kind === 'fullscreen') {
     // four corner brackets (pointing in when already full screen)
     const on = isFullscreen(), d = 13, k = 7;
@@ -1105,8 +1171,9 @@ function drawHUD() {
   text('Score ' + score.toLocaleString(), 36, 46, 40, '#fff', { align: 'left', stroke: '#2a1a4a', strokeW: 8 });
   text(`Level ${levelIdx + 1}: ${LEVELS[levelIdx].name}`, 36, 92, 24, '#e7dcff', { align: 'left', stroke: '#2a1a4a', strokeW: 6, weight: 500 });
   if (state === 'play') {
-    fullscreenButton(UW - 315, 56);
-    iconButton('sound', UW - 230, 56, () => { sfx.on = !sfx.on; });
+    fullscreenButton(UW - 400, 56);
+    iconButton('music', UW - 315, 56, () => music.toggle());
+    iconButton('sound', UW - 230, 56, () => { sfx.on = !sfx.on; saveAudio(); });
     iconButton('levels', UW - 145, 56, () => { state = 'levels'; });
     iconButton('restart', UW - 60, 56, () => loadLevel(levelIdx));
   }
@@ -1189,6 +1256,7 @@ function drawMenu() {
   ctx.restore();
   button('PLAY', W / 2, 770, 280, 96, '#4caf6a', () => { state = 'levels'; });
   fullscreenButton(UW - uiShift - 60, 60);
+  iconButton('music', UW - uiShift - 145, 60, () => music.toggle());
 }
 
 function drawLevels() {
@@ -1196,6 +1264,7 @@ function drawLevels() {
   text('Pick a level', W / 2, 120, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
   iconButton('back', 80 - uiShift + 20, 80, () => { state = 'menu'; });
   fullscreenButton(UW - uiShift - 60, 60);
+  iconButton('music', UW - uiShift - 145, 60, () => music.toggle());
   LEVELS.forEach((lv, i) => {
     const col = i % 3, row = Math.floor(i / 3);
     const x = 520 + col * 280, y = 330 + row * 250, w = 230, h = 200;
@@ -1239,6 +1308,7 @@ resize();
 function setUI() { ctx.setTransform(uiScale, 0, 0, uiScale, 0, uiOffY * uiScale); }
 
 function render() {
+  music.update();
   uiButtons = [];
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#120d22'; ctx.fillRect(0, 0, canvas.width, canvas.height);

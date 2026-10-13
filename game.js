@@ -909,8 +909,8 @@ function ear(R, s, base1, tip, base2, fur, inner, tufts) {
 // CeCe: huge long-haired calico tabby. Brown-grey tabby with black stripes, ginger patches,
 // a big white bib and a white blaze down her nose, green-gold eyes, permanently unimpressed.
 function drawCeCe(R, t, opts) {
-  ear(R, -1, [0.8, -0.4], [0.62, -1.18], [0.16, -0.8], '#d9984f', '#f1b9a8', '#fbfaf7');
-  ear(R, 1, [0.8, -0.4], [0.62, -1.18], [0.16, -0.8], t.body, '#f1b9a8', '#fbfaf7');
+  ear(R, -1, [0.8, -0.4], [0.62, -1.18], [0.16, -0.8], '#d9984f', '#f1b9a8', null);
+  ear(R, 1, [0.8, -0.4], [0.62, -1.18], [0.16, -0.8], t.body, '#f1b9a8', null);
   ctx.strokeStyle = '#5a4a3c'; ctx.lineWidth = R * 0.035; ctx.lineCap = 'round';   // small lynx tips
   for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * R * 0.62, -R * 1.16); ctx.lineTo(s * R * 0.65, -R * 1.3); ctx.moveTo(s * R * 0.62, -R * 1.16); ctx.lineTo(s * R * 0.57, -R * 1.27); ctx.stroke(); }
 
@@ -1000,7 +1000,7 @@ function drawBaby(r, t, opts) {
 
 // Cleo: cream-orange and white semi-longhair, pale green eyes, big white chest ruff, quietly elegant.
 function drawCleo(r, t, opts) {
-  for (const s of [-1, 1]) ear(r, s, [0.92, -0.3], [0.72, -1.3], [0.16, -0.86], t.patch, '#f2b6b0', '#fffdf8');
+  for (const s of [-1, 1]) ear(r, s, [0.92, -0.3], [0.72, -1.3], [0.16, -0.86], t.patch, '#f2b6b0', null);
   fluffPath(r, 20, 0.12, 5);
   const gr = ctx.createRadialGradient(-r * 0.25, -r * 0.4, r * 0.1, 0, 0, r * 1.05);
   gr.addColorStop(0, '#f8dcb6'); gr.addColorStop(1, t.body);

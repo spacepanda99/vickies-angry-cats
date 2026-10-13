@@ -34,7 +34,7 @@ const MATS = {
 
 const CATS = {
   baby: { name: 'Baby', r: 30, density: 0.004, restitution: 0.3, friction: 0.6,
-          body: '#a9a7ad', dark: '#7d7b82', belly: '#f8f6f3', eye: '#cfc77e', patch: '#e9b48d',
+          body: '#a5a4aa', dark: '#6f6e75', belly: '#f4f4f6', eye: '#cfc77e', patch: '#cbcacf',
           power: 'split', hint: 'Tap for ninja clones!' },
   // CeCe weighs a ton: she launches weak, lands short, then rolls like a bowling ball.
   cece: { name: 'CeCe', r: 70, density: 0.00553, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
@@ -848,22 +848,21 @@ function drawCeCe(R, t, opts) {
   whiskers(R, R * 0.22, 1.12, 'rgba(255,255,255,0.9)');
 }
 
-// Baby: small, slim dilute calico. Soft blue-grey with peach cheeks and a peach stripe down the
-// middle of her face, faint tabby lines, white chin, big ears.
+// Baby: small, slim and all greys: soft blue-grey with a paler stripe down her face and paler cheeks,
+// darker tabby lines, white chin, big ears.
 function drawBaby(r, t, opts) {
-  for (const s of [-1, 1]) ear(r, s, [0.95, -0.2], [0.8, -1.38], [0.12, -0.84], t.body, '#efb7a6', null);
-  ctx.fillStyle = t.patch; ctx.beginPath(); ctx.moveTo(-r * 0.62, -r * 0.62); ctx.lineTo(-r * 0.76, -r * 1.2); ctx.lineTo(-r * 0.4, -r * 0.8); ctx.closePath(); ctx.globalAlpha *= 0.6; ctx.fill(); ctx.globalAlpha /= 0.6;
+  for (const s of [-1, 1]) ear(r, s, [0.95, -0.2], [0.8, -1.38], [0.12, -0.84], t.body, '#d9cfd2', null);
 
   ctx.beginPath(); ctx.arc(0, 0, r, 0, 7);
   const gr = ctx.createRadialGradient(-r * 0.3, -r * 0.35, r * 0.1, 0, 0, r * 1.05);
-  gr.addColorStop(0, '#c2c0c6'); gr.addColorStop(1, t.body);
+  gr.addColorStop(0, '#bdbcc2'); gr.addColorStop(1, t.body);
   ctx.fillStyle = gr; ctx.fill();
   ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.clip();
   ctx.fillStyle = t.patch;
   ctx.beginPath(); ctx.ellipse(0, -r * 0.3, r * 0.13, r * 0.55, 0, 0, 7); ctx.fill();          // peach stripe down the face
   ctx.beginPath(); ctx.ellipse(-r * 0.55, r * 0.1, r * 0.33, r * 0.26, 0.3, 0, 7); ctx.fill();  // cheeks
   ctx.beginPath(); ctx.ellipse(r * 0.52, r * 0.14, r * 0.28, r * 0.22, -0.3, 0, 7); ctx.fill();
-  ctx.strokeStyle = 'rgba(110,108,118,0.55)'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(85,84,92,0.6)'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
   for (const dx of [-0.32, -0.18, 0.18, 0.32]) { ctx.beginPath(); ctx.moveTo(dx * r, -r * 0.98); ctx.lineTo(dx * r * 0.85, -r * 0.62); ctx.stroke(); }
   for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * r * 1.0, -r * 0.1); ctx.lineTo(s * r * 0.78, -r * 0.04); ctx.stroke(); }
   ctx.fillStyle = t.belly; ctx.beginPath(); ctx.ellipse(0, r * 0.52, r * 0.42, r * 0.3, 0, 0, 7); ctx.fill();
@@ -871,8 +870,8 @@ function drawBaby(r, t, opts) {
   ctx.restore();
   ctx.strokeStyle = t.dark; ctx.lineWidth = r * 0.06; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
 
-  for (const s of [-1, 1]) catEye(s * r * 0.34, -r * 0.08, r * 0.19, r * 0.2, s, t.eye, opts.calm ? 0.3 : 0.38, opts.calm ? 0.05 : 0.5, s < 0 ? '#d9a888' : t.body);
-  catNoseMouth(r, r * 0.2, '#e6a08b');
+  for (const s of [-1, 1]) catEye(s * r * 0.34, -r * 0.08, r * 0.19, r * 0.2, s, t.eye, opts.calm ? 0.3 : 0.38, opts.calm ? 0.05 : 0.5, t.body);
+  catNoseMouth(r, r * 0.2, '#9d9aa1');
   whiskers(r, r * 0.33, 1.2, 'rgba(255,255,255,0.95)');
 }
 
@@ -1212,10 +1211,11 @@ function drawHUD() {
     hint = CATS[flying[0].game.type].hint;
   }
   if (hint) {
-    ctx.font = `700 38px ${FONT}`;
-    const w = ctx.measureText(hint).width + 60;
-    ctx.fillStyle = 'rgba(20,12,40,0.6)'; rr(UW / 2 - w / 2, 128, w, 64, 32); ctx.fill();
-    text(hint, UW / 2, 161, 38, '#ffe9a8', { stroke: '#2a1a4a', strokeW: 8 });
+    ctx.font = `700 54px ${FONT}`;
+    const w = ctx.measureText(hint).width + 90;
+    ctx.fillStyle = 'rgba(24,14,48,0.82)'; rr(UW / 2 - w / 2, 126, w, 92, 46); ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
+    text(hint, UW / 2, 174, 54, '#ffe14d', { stroke: '#120a26', strokeW: 10 });
   }
 }
 

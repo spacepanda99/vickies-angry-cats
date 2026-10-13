@@ -1,12 +1,13 @@
 'use strict';
-// Vicky's Angry Cats — raccoon burglars stole the toys and treats. Fling the cats and get them back.
+// Vickie's Angry Cats — raccoon burglars stole the toys and treats. Fling the cats and get them back.
 // Everything is drawn in code on one canvas. Physics is Matter.js 0.19 (velocities are per 60Hz step).
 
 const { Engine, Bodies, Body, Composite, Events, Vector, Sleeping } = Matter;
 
 const W = 1600, H = 900, GROUND = 820;
-const SLING = { x: 260, y: 640 };
+const SLING = { x: 300, y: 640 };
 const MAX_PULL = 130;
+const SNAP_PULL = 98;                      // CeCe is too heavy: pull her further than this and the band snaps
 const POWER = 0.165;                       // launch speed per pixel of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
@@ -26,13 +27,14 @@ const MATS = {
 };
 
 const CATS = {
-  baby: { name: 'Baby', r: 20, density: 0.004, restitution: 0.3, friction: 0.6,
+  baby: { name: 'Baby', r: 26, density: 0.004, restitution: 0.3, friction: 0.6,
           body: '#9a9ea6', dark: '#5f636b', belly: '#d9dbe0', eye: '#b8e04a',
           power: 'split', hint: 'Tap for ninja clones!' },
-  cece: { name: 'CeCe', r: 31, density: 0.005, restitution: 0.45, friction: 0.15,
-          body: '#a87a4f', dark: '#6b4a2c', belly: '#f1e2c8', eye: '#e8b33a',
-          power: 'puff', hint: 'Tap to puff up!' },
-  cleo: { name: 'Cleo', r: 24, density: 0.004, restitution: 0.3, friction: 0.5,
+  // CeCe weighs a ton: she launches weak, lands short, then rolls like a bowling ball.
+  cece: { name: 'CeCe', r: 38, density: 0.014, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
+          body: '#9097a0', dark: '#5c626b', belly: '#eceef1', eye: '#e8b33a',
+          power: 'shake', hint: 'Tap for the head shake!' },
+  cleo: { name: 'Cleo', r: 30, density: 0.004, restitution: 0.3, friction: 0.5,
           body: '#fbf8f2', dark: '#b9ad9c', belly: '#ffffff', eye: '#5aa9e6', patch: '#d49a5c',
           power: 'pounce', hint: 'Tap to pounce!' },
 };
@@ -45,7 +47,7 @@ function hut(lv, cx, base, w, h, postMat, beamMat) {
   block(lv, beamMat, cx, base - h - 10, w, 20);
   return base - h - 20;
 }
-function coon(lv, x, base, boss) { const r = boss ? 44 : 26; lv.raccoons.push({ x, y: base - r - 1, r, boss: !!boss }); }
+function coon(lv, x, base, boss) { const r = boss ? 52 : 31; lv.raccoons.push({ x, y: base - r - 1, r, boss: !!boss }); }
 function loot(lv, x, base, kind) { lv.loot.push({ x, y: base - 14, kind }); }
 
 const LEVELS = [
@@ -148,7 +150,8 @@ const sfx = {
   },
   pop() { this.tone('sine', 260, 900, 0.16, 0.2); },
   zoom() { this.tone('square', 300, 1300, 0.25, 0.05); },
-  puff() { this.tone('triangle', 900, 180, 0.35, 0.18); },
+  snap() { this.tone('square', 1800, 120, 0.18, 0.12); this.thud(0.6); },
+  shake() { for (let i = 0; i < 6; i++) this.tone('triangle', i % 2 ? 260 : 340, i % 2 ? 300 : 220, 0.07, 0.13, i * 0.07); },
   ding() { this.tone('triangle', 1200, 1800, 0.15, 0.12); },
   win() { [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13)); },
   lose() { [392, 330, 262].forEach((f, i) => this.tone('sawtooth', f, f * 0.97, 0.3, 0.06, i * 0.22)); },
@@ -164,7 +167,7 @@ let dragging = false, pull = { x: 0, y: 0 };
 let flying = [], powerUsed = false, flyTimer = 0, outTimer = 0, winTimer = -1;
 let settle = 0, score = 0, stars = 0, bonus = 0;
 let toRemove = [], particles = [], popups = [], uiButtons = [];
-let frame = 0, lastThud = 0, launchedOnce = false;
+let frame = 0, lastThud = 0, launchedOnce = false, snapTimer = 0, bandSnapped = false;
 
 function newEngine() {
   engine = Engine.create({ enableSleeping: true, positionIterations: 10, velocityIterations: 8 });
@@ -196,7 +199,7 @@ function makeLoot(l) {
 function makeCat(type, x, y, r) {
   const t = CATS[type];
   const body = Bodies.circle(x, y, r || t.r, {
-    density: t.density, friction: t.friction, restitution: t.restitution, frictionAir: 0.004,
+    density: t.density, friction: t.friction, restitution: t.restitution, frictionAir: t.frictionAir || 0.004,
     label: 'cat', collisionFilter: { group: -1 } });   // cats never hit each other (clones!)
   body.game = { kind: 'cat', type, r: r || t.r, rest: 0, mult: 1, done: false, trail: [] };
   return body;
@@ -215,7 +218,7 @@ function loadLevel(i) {
   current = queue.shift();
   phase = 'aim'; dragging = false; pull = { x: 0, y: 0 };
   flying = []; powerUsed = false; flyTimer = 0; outTimer = 0; winTimer = -1;
-  settle = 90; score = 0; stars = 0; bonus = 0;
+  settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false;
   toRemove = []; particles = []; popups = [];
   state = 'play';
 }
@@ -274,12 +277,23 @@ function sparkle(pos, n = 8) {
 
 // ---------------------------------------------------------------- actions
 
+const launchPower = type => POWER * (CATS[type].launch || 1);
+const willSnap = () => bandSnapped;
+
 function launch() {
   const body = makeCat(current, SLING.x + pull.x, SLING.y + pull.y);
-  Body.setVelocity(body, { x: -pull.x * POWER, y: -pull.y * POWER });
-  Body.setAngularVelocity(body, -pull.x * 0.0012);
+  if (willSnap()) {
+    // the band can't take her weight: she just plops forward a little and rolls from there
+    const d = Math.hypot(pull.x, pull.y);
+    Body.setVelocity(body, { x: Math.max(1.5, (-pull.x / d) * 2.5 + 1), y: -3.5 });
+    snapTimer = 100; bandSnapped = false;
+  } else {
+    const k = launchPower(current);
+    Body.setVelocity(body, { x: -pull.x * k, y: -pull.y * k });
+  }
+  Body.setAngularVelocity(body, snapTimer === 100 ? 0.02 : -pull.x * 0.0012);
   Composite.add(engine.world, body);
-  sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.8 : 1);
+  sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.75 : 1);
   flying = [body]; current = null; phase = 'flying'; powerUsed = false; flyTimer = 0;
   pull = { x: 0, y: 0 }; launchedOnce = true;
 }
@@ -298,12 +312,28 @@ function usePower() {
       Composite.add(engine.world, nb); flying.push(nb);
     }
     poof(c.position, 6, 0.6); sfx.pop();
-  } else if (t.power === 'puff') {
-    Body.scale(c, 1.65, 1.65);
-    g.r *= 1.65;
-    Body.setDensity(c, 0.009);
-    g.mult = 1.6; g.puffed = true;
-    poof(c.position, 10, 1); sfx.puff();
+  } else if (t.power === 'shake') {
+    // CeCe's signature fast head shake: a blast of fur that shoves and dents everything nearby
+    g.shake = 42;
+    const R = 220;
+    for (const b of bodies()) {
+      if (b === c || b.isStatic || !b.game || b.game.kind === 'cat' || b.game.dead) continue;
+      const d = Vector.sub(b.position, c.position), dist = Vector.magnitude(d);
+      if (dist > R || dist < 0.01) continue;
+      const f = 1 - dist / R;
+      Sleeping.set(b, false);
+      Body.setVelocity(b, Vector.add(b.velocity, Vector.mult(Vector.normalise(d), 3 + 11 * f)));
+      Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.3 * f);
+      if (b.game.hp !== undefined) { b.game.hp -= 45 * f; if (b.game.hp <= 0) kill(b); }
+    }
+    particles.push({ type: 'ring', x: c.position.x, y: c.position.y, vx: 0, vy: 0, s: R, life: 24, max: 24 });
+    for (let i = 0; i < 26; i++) {
+      const a = rand(0, Math.PI * 2), sp = rand(4, 10);
+      particles.push({ type: 'fur', x: c.position.x + Math.cos(a) * g.r, y: c.position.y + Math.sin(a) * g.r,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, s: rand(6, 12), rot: a, vr: rand(-0.2, 0.2), life: 45, max: 45,
+        color: i % 3 ? '#9097a0' : '#eceef1' });
+    }
+    sfx.shake();
   } else if (t.power === 'pounce') {
     const v = c.velocity, sp = Vector.magnitude(v);
     if (sp > 0.1) Body.setVelocity(c, Vector.mult(Vector.normalise(v), Math.min(MAX_SPEED, Math.max(18, sp * 1.8))));
@@ -321,7 +351,9 @@ function step() {
   frame++;
   for (const p of particles) {
     p.life--; p.x += p.vx; p.y += p.vy; if (p.vr) p.rot += p.vr;
-    if (p.type === 'puff') { p.vx *= 0.94; p.vy *= 0.94; p.s *= 1.02; } else p.vy += 0.35;
+    if (p.type === 'puff') { p.vx *= 0.94; p.vy *= 0.94; p.s *= 1.02; }
+    else if (p.type === 'fur') { p.vx *= 0.95; p.vy = p.vy * 0.95 + 0.12; }
+    else if (p.type !== 'ring') p.vy += 0.35;
   }
   particles = particles.filter(p => p.life > 0);
   for (const p of popups) { p.life--; p.y -= 0.8; }
@@ -330,6 +362,7 @@ function step() {
   if (!engine || state === 'menu' || state === 'levels') return;
   Engine.update(engine, STEP);
   if (settle > 0) settle--;
+  if (snapTimer > 0) snapTimer--;
 
   for (const b of bodies()) {
     if (b.isStatic) continue;
@@ -337,6 +370,9 @@ function step() {
     if (g && g.kind === 'cat') {
       const sp = Vector.magnitude(b.velocity);
       if (sp > MAX_SPEED) Body.setVelocity(b, Vector.mult(b.velocity, MAX_SPEED / sp));
+      if (g.shake > 0) g.shake--;
+      // rolling resistance on the floor, so a weak (snapped) roll peters out short of the fort
+      if (b.position.y > GROUND - g.r - 3) Body.setVelocity(b, { x: b.velocity.x * 0.99, y: b.velocity.y });
       if (frame % 2 === 0) { g.trail.push({ x: b.position.x, y: b.position.y }); if (g.trail.length > 40) g.trail.shift(); }
     }
     if (b.position.y > H + 300 || b.position.x < -300 || b.position.x > W + 300) {
@@ -410,6 +446,13 @@ function updatePull(p) {
   const r = CATS[current].r;
   if (SLING.y + dy > GROUND - r) dy = GROUND - r - SLING.y;
   pull = { x: dx, y: dy };
+  if (current === 'cece' && !bandSnapped && Math.hypot(dx, dy) > SNAP_PULL) {
+    // once it snaps it stays snapped: letting go just plops her out
+    bandSnapped = true; snapTimer = 100;
+    popups.push({ x: SLING.x, y: SLING.y - 90, text: 'SNAP! She\'s too heavy!', life: 90, big: true });
+    sparkle({ x: SLING.x, y: SLING.y - 5 }, 8);
+    sfx.snap();
+  }
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -433,7 +476,7 @@ canvas.addEventListener('pointermove', e => { if (dragging) updatePull(toWorld(e
 function release() {
   if (!dragging) return;
   dragging = false;
-  if (Math.hypot(pull.x, pull.y) > 25) launch(); else pull = { x: 0, y: 0 };
+  if (bandSnapped || Math.hypot(pull.x, pull.y) > 25) launch(); else pull = { x: 0, y: 0 };
 }
 canvas.addEventListener('pointerup', release);
 canvas.addEventListener('pointercancel', release);
@@ -504,27 +547,56 @@ function drawCat(x, y, r, ang, type, opts = {}) {
   ctx.save();
   ctx.translate(x, y); ctx.rotate(ang);
   if (opts.alpha != null) ctx.globalAlpha = opts.alpha;
+
+  if (type === 'cece') {
+    // CeCe is mostly fluff: three layers of spiky long fur, then a smaller face sits inside it
+    const R = r;
+    // soft cloud of fur: rings of overlapping puffs, darkest outside, lightest inside
+    const cloud = (dist, ball, n, color, phase) => {
+      ctx.fillStyle = color;
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2 + phase, q = ball * (0.85 + 0.3 * hash(i * 2.3 + phase * 17));
+        ctx.beginPath(); ctx.arc(Math.cos(a) * dist, Math.sin(a) * dist, q, 0, 7); ctx.fill();
+      }
+    };
+    cloud(R * 0.84, R * 0.3, 18, t.dark, 0);
+    cloud(R * 0.8, R * 0.28, 18, t.body, 0.17);
+    cloud(R * 0.7, R * 0.27, 15, '#a6adb6', 0.05);
+    ctx.fillStyle = '#a6adb6'; ctx.beginPath(); ctx.arc(0, 0, R * 0.75, 0, 7); ctx.fill();
+    // wispy strands poking out of the fluff
+    ctx.strokeStyle = '#b9bfc7'; ctx.lineWidth = Math.max(1, R * 0.045); ctx.lineCap = 'round';
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + 0.3, d0 = R * 0.95, d1 = R * (1.12 + 0.08 * hash(i));
+      ctx.beginPath(); ctx.moveTo(Math.cos(a) * d0, Math.sin(a) * d0);
+      ctx.quadraticCurveTo(Math.cos(a + 0.12) * d1, Math.sin(a + 0.12) * d1, Math.cos(a + 0.2) * d1, Math.sin(a + 0.2) * d1);
+      ctx.stroke();
+    }
+    // big white fluffy chest bib and cheek puffs
+    ctx.fillStyle = t.belly;
+    for (const [x0, y0, q] of [[0, 0.62, 0.34], [-0.28, 0.55, 0.28], [0.28, 0.55, 0.28], [-0.5, 0.36, 0.24], [0.5, 0.36, 0.24], [0, 0.85, 0.24]]) {
+      ctx.beginPath(); ctx.arc(x0 * R, y0 * R, q * R, 0, 7); ctx.fill();
+    }
+    r = R * 0.7;
+  }
   const lw = Math.max(1.5, r * 0.09);
 
-  // ears (CeCe gets Maine Coon tufts, Cleo's are tan)
+  // ears (CeCe gets big Maine Coon tufts, Cleo's are tan)
   for (const s of [-1, 1]) {
     ctx.beginPath(); ctx.moveTo(s * r * 0.95, -r * 0.25); ctx.lineTo(s * r * 0.72, -r * 1.22); ctx.lineTo(s * r * 0.12, -r * 0.84); ctx.closePath();
     ctx.fillStyle = type === 'cleo' ? t.patch : t.body; ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = t.dark; ctx.stroke();
     ctx.beginPath(); ctx.moveTo(s * r * 0.78, -r * 0.45); ctx.lineTo(s * r * 0.69, -r * 1.0); ctx.lineTo(s * r * 0.34, -r * 0.76); ctx.closePath();
     ctx.fillStyle = '#f5a3b7'; ctx.fill();
     if (type === 'cece') {
-      ctx.strokeStyle = t.dark; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(s * r * 0.72, -r * 1.2); ctx.lineTo(s * r * 0.78, -r * 1.42); ctx.moveTo(s * r * 0.72, -r * 1.2); ctx.lineTo(s * r * 0.64, -r * 1.4); ctx.stroke();
+      ctx.strokeStyle = t.dark; ctx.lineWidth = r * 0.07; ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const [dx, len] of [[0, 0.32], [0.09, 0.26], [-0.09, 0.24]]) { ctx.moveTo(s * r * 0.72, -r * 1.2); ctx.lineTo(s * r * (0.72 + dx), -r * (1.2 + len)); }
+      ctx.stroke();
+      ctx.strokeStyle = '#f4f5f7'; ctx.lineWidth = r * 0.05;   // fur sticking out of the ears
+      ctx.beginPath(); ctx.moveTo(s * r * 0.55, -r * 0.7); ctx.lineTo(s * r * 0.62, -r * 0.98); ctx.moveTo(s * r * 0.5, -r * 0.72); ctx.lineTo(s * r * 0.5, -r * 0.95); ctx.stroke();
     }
   }
 
   // head / body
-  if (type === 'cece') {
-    // fluffy ruff: a bumpy outline
-    ctx.beginPath();
-    for (let i = 0; i <= 28; i++) { const a = (i / 28) * Math.PI * 2, q = r * (i % 2 ? 1.0 : 1.1); ctx.lineTo(Math.cos(a) * q, Math.sin(a) * q); }
-    ctx.closePath(); ctx.fillStyle = t.body; ctx.fill(); ctx.lineWidth = lw; ctx.strokeStyle = t.dark; ctx.stroke();
-  }
   ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fillStyle = t.body; ctx.fill();
 
   ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.clip();
@@ -840,15 +912,28 @@ function drawSlingFront() {
   ctx.beginPath(); ctx.moveTo(SLING.x, 712); ctx.lineTo(SLING.x - 24, 642); ctx.stroke();
   ctx.lineCap = 'butt';
 }
-function band(x0, y0, x1, y1) {
-  ctx.strokeStyle = '#e8578f'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+function band(x0, y0, x1, y1, strain = 0) {
+  // strain 0..1 turns the band red and thin as CeCe stretches it toward snapping
+  ctx.strokeStyle = strain > 0 ? `rgb(${232},${Math.round(87 - 60 * strain)},${Math.round(143 - 110 * strain)})` : '#e8578f';
+  ctx.lineWidth = 8 - 4 * strain; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); ctx.lineCap = 'butt';
+}
+function snappedBands() {
+  // the two broken ends dangle and swing for a moment
+  const sway = Math.sin(frame * 0.25) * 10 * (snapTimer / 100);
+  ctx.strokeStyle = '#e8578f'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+  for (const [x0, dir] of [[SLING.x + 26, 1], [SLING.x - 24, -1]]) {
+    ctx.beginPath(); ctx.moveTo(x0, 646); ctx.quadraticCurveTo(x0 + dir * 8 + sway, 670, x0 + sway * 1.5, 700); ctx.stroke();
+  }
+  ctx.lineCap = 'butt';
 }
 
 function drawTrajectory() {
-  let x = SLING.x + pull.x, y = SLING.y + pull.y, vx = -pull.x * POWER, vy = -pull.y * POWER;
+  const k = launchPower(current);
+  let x = SLING.x + pull.x, y = SLING.y + pull.y, vx = -pull.x * k, vy = -pull.y * k;
+  const fa = 1 - (CATS[current].frictionAir || 0.004);
   for (let i = 1; i <= 70; i++) {
-    vx *= 0.996; vy = vy * 0.996 + GRAV_STEP; x += vx; y += vy;
+    vx *= fa; vy = vy * fa + GRAV_STEP; x += vx; y += vy;
     if (y > GROUND) break;
     if (i % 4 === 0) {
       ctx.fillStyle = `rgba(255,255,255,${0.85 - i / 90})`;
@@ -861,13 +946,17 @@ function drawPlay() {
   drawSlingBack();
   // waiting cats sit in line behind the slingshot
   queue.forEach((type, i) => {
-    const r = CATS[type].r * 0.8, x = SLING.x - 70 - i * 52, bob = Math.sin(frame * 0.05 + i) * 2;
+    const r = CATS[type].r * 0.72, x = SLING.x - 72 - i * 60, bob = Math.sin(frame * 0.05 + i) * 2;
     drawCat(x, GROUND - r + bob, r, 0, type, { calm: true });
   });
 
-  const tip = { x: SLING.x + pull.x, y: SLING.y + pull.y };
   const loaded = phase === 'aim' && current;
-  if (loaded) band(SLING.x + 26, 646, tip.x + 6, tip.y);
+  const strain = loaded && current === 'cece' && !bandSnapped ? Math.max(0, Math.min(1, (Math.hypot(pull.x, pull.y) - SNAP_PULL * 0.6) / (SNAP_PULL * 0.4))) : 0;
+  const snapping = loaded && dragging && willSnap();
+  const jig = strain > 0.6 ? (Math.random() - 0.5) * 4 * strain : 0;     // the slingshot creaks under her
+  const tip = { x: SLING.x + pull.x + jig, y: SLING.y + pull.y + jig };
+  if (loaded && !snapping) band(SLING.x + 26, 646, tip.x + 6, tip.y, strain);
+  if (snapTimer > 0 || bandSnapped) snappedBands();
 
   const list = bodies().filter(b => b.game);
   const order = { block: 0, loot: 1, coon: 2, cat: 3 };
@@ -885,14 +974,24 @@ function drawPlay() {
         ctx.fillStyle = 'rgba(255,255,255,0.35)';
         g.trail.forEach((p, i) => { if (i % 2 === 0) { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, 7); ctx.fill(); } });
       }
-      drawCat(b.position.x, b.position.y, g.r, b.angle, g.type, { alpha: g.clone ? 0.75 : 1 });
+      if (g.shake > 0) {
+        // the head shake: fast side-to-side wobble with blurry ghost copies
+        const amt = g.shake / 42, w = Math.sin(g.shake * 1.6) * 0.5 * amt;
+        ctx.globalAlpha = 0.3;
+        drawCat(b.position.x - 9 * amt, b.position.y, g.r, b.angle - w, g.type);
+        drawCat(b.position.x + 9 * amt, b.position.y, g.r, b.angle + w, g.type);
+        ctx.globalAlpha = 1;
+        drawCat(b.position.x + w * 14, b.position.y, g.r, b.angle + w, g.type);
+      } else {
+        drawCat(b.position.x, b.position.y, g.r, b.angle, g.type, { alpha: g.clone ? 0.75 : 1 });
+      }
     }
   }
 
   if (loaded) {
-    if (dragging) drawTrajectory();
+    if (dragging && !snapping) drawTrajectory();
     drawCat(tip.x, tip.y, CATS[current].r, 0, current);
-    band(SLING.x - 24, 646, tip.x - 6, tip.y);
+    if (!snapping) band(SLING.x - 24, 646, tip.x - 6, tip.y, strain);
   }
   drawSlingFront();
 
@@ -900,6 +999,14 @@ function drawPlay() {
     const a = p.life / p.max;
     ctx.globalAlpha = Math.min(1, a * 1.5);
     if (p.type === 'puff') { ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.s, 0, 7); ctx.fill(); }
+    else if (p.type === 'ring') {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 10 * a;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.s * (1 - a * 0.85), 0, 7); ctx.stroke();
+    } else if (p.type === 'fur') {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color; ctx.beginPath(); ctx.moveTo(-p.s, 0); ctx.quadraticCurveTo(0, -p.s * 0.35, p.s, 0); ctx.quadraticCurveTo(0, p.s * 0.2, -p.s, 0); ctx.fill();
+      ctx.restore();
+    }
     else if (p.type === 'chip') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); }
     else { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); starShape(0, 0, p.s, p.color); ctx.restore(); }
   }
@@ -921,7 +1028,10 @@ function drawPlay() {
 
   let hint = null;
   if (state === 'play' && phase === 'aim' && current && !dragging) {
-    hint = !launchedOnce ? 'Pull the cat back and let go!' : `${CATS[current].name} is up!`;
+    hint = !launchedOnce ? 'Pull the cat back and let go!'
+      : current === 'cece' ? 'CeCe is up! Careful, she\'s heavy...' : `${CATS[current].name} is up!`;
+  } else if (state === 'play' && phase === 'aim' && dragging && current === 'cece') {
+    hint = bandSnapped ? 'Oops! Let go and watch her plop...' : strain > 0.4 ? 'Easy... she\'s really heavy!' : null;
   } else if (state === 'play' && phase === 'flying' && !powerUsed && flying[0] && !flying[0].game.done) {
     hint = CATS[flying[0].game.type].hint;
   }
@@ -969,12 +1079,12 @@ function drawLost() {
 
 function drawMenu() {
   ctx.fillStyle = 'rgba(10,5,25,0.35)'; ctx.fillRect(0, 0, W, H);
-  text("Vicky's", W / 2, 150, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
+  text("Vickie's", W / 2, 150, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
   text('ANGRY CATS', W / 2, 250, 130, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
   text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 345, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
   drawCat(330, 560 + bob(0), 46, -0.1, 'baby');
-  drawCat(470, 545 + bob(1), 66, 0, 'cece');
+  drawCat(470, 540 + bob(1), 80, 0, 'cece');
   drawCat(615, 560 + bob(2), 52, 0.08, 'cleo');
   text('Baby', 330, 640, 24, '#fff', { stroke: '#3a2160', strokeW: 6 });
   text('CeCe', 470, 640, 24, '#fff', { stroke: '#3a2160', strokeW: 6 });

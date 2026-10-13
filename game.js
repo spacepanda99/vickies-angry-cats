@@ -722,16 +722,6 @@ function drawCat(x, y, r, ang, type, opts = {}) {
   ctx.restore();
   ctx.lineWidth = lw; ctx.strokeStyle = t.dark; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
 
-  // ninja headband for Baby
-  if (type === 'baby') {
-    ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.clip();
-    ctx.fillStyle = '#d6303c'; ctx.fillRect(-r, -r * 0.62, r * 2, r * 0.26);
-    ctx.restore();
-    ctx.fillStyle = '#d6303c';
-    ctx.beginPath(); ctx.moveTo(r * 0.92, -r * 0.5); ctx.lineTo(r * 1.55, -r * 0.85); ctx.lineTo(r * 1.45, -r * 0.55); ctx.closePath(); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(r * 0.92, -r * 0.45); ctx.lineTo(r * 1.6, -r * 0.3); ctx.lineTo(r * 1.4, -r * 0.12); ctx.closePath(); ctx.fill();
-  }
-
   // eyes
   for (const s of [-1, 1]) {
     const ex = s * r * 0.36, ey = -r * 0.08;

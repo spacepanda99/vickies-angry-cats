@@ -178,7 +178,7 @@ const sfx = {
     return true;
   },
   win() {
-    if (this.playSample('win', 0.8)) return;
+    if (this.playSample('win', 0.45)) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13));
   },
   lose() {

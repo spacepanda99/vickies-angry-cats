@@ -618,7 +618,7 @@ window.addEventListener('keydown', e => {
 // ---------------------------------------------------------------- drawing helpers
 
 function text(str, x, y, size, fill, o = {}) {
-  ctx.font = `${o.weight || 700} ${size}px ${FONT}`;
+  ctx.font = `${o.weight || 700} ${size}px ${o.font || FONT}`;
   ctx.textAlign = o.align || 'center';
   ctx.textBaseline = 'middle';
   if (o.stroke) { ctx.lineJoin = 'round'; ctx.lineWidth = o.strokeW || size * 0.2; ctx.strokeStyle = o.stroke; ctx.strokeText(str, x, y); }
@@ -1262,22 +1262,28 @@ function drawLost() {
 
 function drawMenu() {
   ctx.fillStyle = 'rgba(30,50,60,0.22)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
-  text("Vickie's", W / 2, 130, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
-  text('ANGRY CATS', W / 2, 230, 130, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
-  text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 325, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
+  text("Vickie's", W / 2, 110, 60, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
+  text('ANGRY CATS', W / 2, 205, 124, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
+  text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 293, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
-  drawCat(250, 545 + bob(0), 62, -0.1, 'baby');
-  drawCat(495, 520 + bob(1), 120, 0, 'cece');
-  drawCat(745, 545 + bob(2), 68, 0.08, 'cleo');
-  text('Baby', 250, 640, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
-  text('CeCe', 495, 680, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
-  text('Cleo', 745, 640, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
-  drawCoon(1130, 545 + bob(3), 78, Math.sin(frame * 0.03) * 0.1, { hp: 30, maxHp: 30, blink: 50 });
-  drawCoon(1320, 565 + bob(4), 58, 0.1, { hp: 30, maxHp: 30, blink: 120 });
-  ctx.save(); ctx.translate(1225, 640); ctx.rotate(-0.2); ctx.scale(1.5, 1.5);
-  drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type: 'fish' } });
-  ctx.restore();
-  button('PLAY', W / 2, 770, 280, 96, '#4caf6a', () => { state = 'levels'; });
+  // the raccoon gang lurks off to the sides, clutching stolen treats
+  const side = Math.max(0, uiShift) * 0.6;   // on wide phones, push them further out
+  const fish = (x, y, a) => { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(1.6, 1.6); drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type: 'fish' } }); ctx.restore(); };
+  const yarn = (x, y) => { ctx.save(); ctx.translate(x, y); ctx.scale(1.6, 1.6); drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type: 'yarn' } }); ctx.restore(); };
+  drawCoon(150 - side, 540 + bob(3), 66, Math.sin(frame * 0.03) * 0.1, { hp: 30, maxHp: 30, blink: 50 });
+  drawCoon(300 - side * 0.6, 640 + bob(4), 46, 0.12, { hp: 30, maxHp: 30, blink: 120 });
+  fish(225 - side * 0.8, 620, -0.3);
+  drawCoon(1450 + side, 540 + bob(5), 66, -Math.sin(frame * 0.03) * 0.1, { hp: 30, maxHp: 30, blink: 170 });
+  drawCoon(1300 + side * 0.6, 640 + bob(6), 46, -0.12, { hp: 30, maxHp: 30, blink: 20 });
+  yarn(1378 + side * 0.8, 618);
+  // the three cats front and centre
+  drawCat(800, 530 + bob(1), 132, 0, 'cece');
+  drawCat(538, 568 + bob(0), 84, -0.08, 'baby');
+  drawCat(1065, 565 + bob(2), 92, 0.06, 'cleo');
+  text('Baby', 538, 690, 66, '#ffd9bf', { font: "Bangers, Impact, sans-serif", weight: 400, stroke: '#4a4856', strokeW: 10 });
+  text('CeCe', 800, 712, 74, '#fff3e0', { font: "Chewy, 'Comic Sans MS', cursive", weight: 400, stroke: '#5a4030', strokeW: 11 });
+  text('Cleo', 1065, 690, 78, '#ffe6c4', { font: "'Dancing Script', 'Brush Script MT', cursive", weight: 700, stroke: '#9a5a2a', strokeW: 10 });
+  button('PLAY', W / 2, 818, 280, 84, '#4caf6a', () => { state = 'levels'; });
   fullscreenButton(UW - uiShift - 60, 60);
   iconButton('music', UW - uiShift - 145, 60, () => music.toggle());
 }
@@ -1366,6 +1372,9 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// canvas text only uses a web font once it has been asked for
+if (document.fonts) for (const f of ["40px Bangers", "40px Chewy", "700 40px 'Dancing Script'", "700 40px Fredoka"]) document.fonts.load(f).catch(() => {});
 
 // Handy for testing: index.html?level=3 jumps straight in.
 const qLevel = parseInt(new URLSearchParams(location.search).get('level'), 10);

@@ -200,7 +200,7 @@ const sfx = {
     return true;
   },
   win() {
-    if (this.playSample('win', 0.45)) return;
+    if (this.playSample('win', 0.25)) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13));
   },
   lose() {
@@ -792,6 +792,7 @@ function catEye(ex, ey, w, h, s, color, lid, tilt, lidColor) {
   ctx.fillStyle = color; ctx.fillRect(ex - w, ey - h, w * 2, h * 2);
   ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.ellipse(ex + s * w * 0.12, ey + h * 0.1, w * 0.3, h * 0.75, 0, 0, 7); ctx.fill();
   ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex - w * 0.3, ey - h * 0.25, w * 0.22, 0, 7); ctx.fill();
+  if (lid === 0) { ctx.beginPath(); ctx.arc(ex + w * 0.28, ey + h * 0.35, w * 0.11, 0, 7); ctx.fill(); }   // extra sparkle for bright eyes
   if (lid > 0) {
     // upper lid in fur colour, with its lower edge slanted
     const yl = ey - h + lid * h * 2, inner = -s * w * 1.2, outer = s * w * 1.2;
@@ -900,7 +901,7 @@ function drawCeCe(R, t, opts) {
   for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * R * 0.12, R * 0.24, R * 0.14, 0, 7); ctx.fill(); }
 
   // that look: half-closed green-gold eyes, lids slanted (crosser when not calm)
-  for (const s of [-1, 1]) catEye(s * R * 0.3, -R * 0.13, R * 0.15, R * 0.15, s, t.eye, opts.calm ? 0.42 : 0.5, opts.calm ? 0.1 : 0.45, s < 0 ? '#c98a4a' : t.body);
+  for (const s of [-1, 1]) catEye(s * R * 0.3, -R * 0.13, R * 0.15 * (opts.bright ? 1.22 : 1), R * 0.15 * (opts.bright ? 1.3 : 1), s, t.eye, opts.bright ? 0 : opts.calm ? 0.42 : 0.5, opts.calm ? 0.1 : 0.45, s < 0 ? '#c98a4a' : t.body);
   catNoseMouth(R, R * 0.1, '#e7a3a6');
   whiskers(R, R * 0.22, 1.12, 'rgba(255,255,255,0.9)');
 }
@@ -927,7 +928,7 @@ function drawBaby(r, t, opts) {
   ctx.restore();
   ctx.strokeStyle = t.dark; ctx.lineWidth = r * 0.06; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
 
-  for (const s of [-1, 1]) catEye(s * r * 0.34, -r * 0.08, r * 0.19, r * 0.2, s, t.eye, opts.calm ? 0.3 : 0.38, opts.calm ? 0.05 : 0.5, t.body);
+  for (const s of [-1, 1]) catEye(s * r * 0.34, -r * 0.08, r * 0.19 * (opts.bright ? 1.15 : 1), r * 0.2 * (opts.bright ? 1.2 : 1), s, t.eye, opts.bright ? 0 : opts.calm ? 0.3 : 0.38, opts.calm ? 0.05 : 0.5, t.body);
   catNoseMouth(r, r * 0.2, '#9d9aa1');
   whiskers(r, r * 0.33, 1.2, 'rgba(255,255,255,0.95)');
 }
@@ -959,7 +960,7 @@ function drawCleo(r, t, opts) {
   }
   ctx.closePath(); ctx.fill();
 
-  for (const s of [-1, 1]) catEye(s * r * 0.32, -r * 0.1, r * 0.17, r * 0.18, s, t.eye, opts.calm ? 0.25 : 0.38, opts.calm ? -0.05 : 0.25, t.body);
+  for (const s of [-1, 1]) catEye(s * r * 0.32, -r * 0.1, r * 0.17 * (opts.bright ? 1.15 : 1), r * 0.18 * (opts.bright ? 1.2 : 1), s, t.eye, opts.bright ? 0 : opts.calm ? 0.25 : 0.38, opts.calm ? -0.05 : 0.25, t.body);
   catNoseMouth(r, r * 0.17, '#eba3a0');
   whiskers(r, r * 0.29, 1.18, 'rgba(255,255,255,0.95)');
 }
@@ -1353,26 +1354,87 @@ function drawLost() {
   button('Try again', W / 2 + 110, 590, 200, 72, '#f2994a', () => loadLevel(levelIdx));
 }
 
+// ---- home screen raccoon crime scenes (UI space; the floor line is at y = 800) ----
+const MENU_FLOOR = 800;
+function coonArm(x0, y0, x1, y1, w) {
+  ctx.strokeStyle = '#7b808a'; ctx.lineWidth = w; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.fillStyle = '#2b2d33'; ctx.beginPath(); ctx.arc(x1, y1, w * 0.62, 0, 7); ctx.fill();
+  ctx.lineCap = 'butt';
+}
+function menuLoot(type, x, y, a, s) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a || 0); ctx.scale(s || 1.6, s || 1.6);
+  drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type } });
+  ctx.restore();
+}
+// left: one tiptoes off with a stuffed loot sack while the lookout shines a flashlight and shushes
+function drawGetaway() {
+  const tip = Math.abs(Math.sin(frame * 0.12)) * 10;          // sneaky tiptoe bounce
+  const x = 215, y = MENU_FLOOR - 52 - tip;
+  // the sack, slung over the shoulder
+  ctx.fillStyle = '#b98b5a';
+  ctx.beginPath(); ctx.ellipse(x - 70, y - 30, 64, 56, -0.3, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#8a6438'; ctx.lineWidth = 3; ctx.stroke();
+  ctx.fillStyle = '#a07646'; ctx.beginPath(); ctx.moveTo(x - 30, y - 82); ctx.lineTo(x - 12, y - 100); ctx.lineTo(x - 6, y - 80); ctx.closePath(); ctx.fill();
+  menuLoot('fish', x - 92, y - 84, -0.8, 1.7);
+  menuLoot('yarn', x - 52, y - 92, 0, 1.4);
+  ctx.fillStyle = '#7a5a34'; ctx.font = `700 26px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('LOOT', x - 92, y - 12);
+  drawCoon(x, y, 52, -0.12, { hp: 30, maxHp: 30, blink: 50 });
+  coonArm(x - 22, y + 10, x - 30, y - 62, 11);                   // gripping the sack
+  // the lookout with a flashlight
+  const lx = 345, ly = MENU_FLOOR - 40;
+  ctx.fillStyle = 'rgba(255,240,150,0.28)';
+  ctx.beginPath(); ctx.moveTo(lx - 30, ly - 22); ctx.lineTo(lx - 175, ly - 150); ctx.lineTo(lx - 205, ly - 75); ctx.closePath(); ctx.fill();
+  drawCoon(lx, ly, 40, 0.08, { hp: 30, maxHp: 30, blink: 120 });
+  ctx.fillStyle = '#4b4f57'; ctx.save(); ctx.translate(lx - 32, ly - 18); ctx.rotate(-0.7); ctx.fillRect(-14, -6, 28, 12); ctx.fillStyle = '#ffe680'; ctx.fillRect(-18, -7, 6, 14); ctx.restore();
+  coonArm(lx - 10, ly + 10, lx - 28, ly - 14, 9);
+  // "Shh!" bubble
+  const bx = lx + 30, by = ly - 88;
+  ctx.fillStyle = '#ffffff'; rr(bx - 46, by - 24, 92, 48, 22); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(bx - 14, by + 22); ctx.lineTo(bx - 26, by + 40); ctx.lineTo(bx + 2, by + 22); ctx.closePath(); ctx.fill();
+  text('Shh!', bx, by + 1, 28, '#3a2160');
+}
+// right: a two-raccoon tower raiding the treat jar on a side table
+function drawJarRaid() {
+  const tx = 1400, top = 640;
+  // side table
+  ctx.fillStyle = '#c9a27a'; rr(tx - 105, top, 210, 16, 4); ctx.fill();
+  ctx.fillStyle = '#b08a62'; ctx.fillRect(tx - 92, top + 16, 14, MENU_FLOOR - top - 16); ctx.fillRect(tx + 78, top + 16, 14, MENU_FLOOR - top - 16);
+  // the treat jar, lid knocked off
+  const jx = tx + 42, jy = top - 50;
+  ctx.fillStyle = 'rgba(205,235,255,0.75)'; rr(jx - 42, jy - 50, 84, 100, 16); ctx.fill();
+  ctx.strokeStyle = '#7fb6d8'; ctx.lineWidth = 3; ctx.stroke();
+  for (const [dx, dy, a] of [[-16, 26, 0.3], [14, 30, -0.4], [-4, 8, 0.1], [18, 6, 2.8]]) menuLoot('fish', jx + dx, jy + dy, a, 1.0);
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(jx - 42, jy - 18, 84, 22);
+  text('TREATS', jx, jy - 7, 17, '#e05a5a');
+  ctx.save(); ctx.translate(tx - 60, top - 8); ctx.rotate(-0.25); ctx.fillStyle = '#e05a5a'; rr(-30, -8, 60, 16, 6); ctx.fill(); ctx.restore();
+  // bottom raccoon straining under the top one
+  const wob = Math.sin(frame * 0.09);
+  const bx = tx - 120, by = MENU_FLOOR - 56;
+  drawCoon(bx, by, 56, 0.06 * wob, { hp: 30, maxHp: 30, blink: 170 });
+  ctx.fillStyle = '#9fd3f5'; ctx.beginPath(); ctx.ellipse(bx + 50, by - 34, 6, 9, 0.3, 0, 7); ctx.fill();   // sweat drop
+  // top raccoon stretching over to the jar, fish in paw
+  const ux = bx + 12 + wob * 4, uy = by - 100;
+  drawCoon(ux, uy, 44, 0.25 + wob * 0.06, { hp: 30, maxHp: 30, blink: 20 });
+  coonArm(ux + 26, uy + 6, jx - 18, jy - 44 + wob * 3, 11);
+  menuLoot('fish', jx - 10, jy - 58 + wob * 3, -0.5, 1.3);
+}
+
 function drawMenu() {
   ctx.fillStyle = 'rgba(30,50,60,0.22)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
   text("Vickie's", W / 2, 110, 60, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
   text('ANGRY CATS', W / 2, 205, 124, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
   text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 293, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
-  // the raccoon gang lurks off to the sides, clutching stolen treats
-  const side = Math.max(0, uiShift) * 0.6;   // on wide phones, push them further out
-  const fish = (x, y, a) => { ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(1.6, 1.6); drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type: 'fish' } }); ctx.restore(); };
-  const yarn = (x, y) => { ctx.save(); ctx.translate(x, y); ctx.scale(1.6, 1.6); drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type: 'yarn' } }); ctx.restore(); };
-  drawCoon(150 - side, 540 + bob(3), 66, Math.sin(frame * 0.03) * 0.1, { hp: 30, maxHp: 30, blink: 50 });
-  drawCoon(300 - side * 0.6, 640 + bob(4), 46, 0.12, { hp: 30, maxHp: 30, blink: 120 });
-  fish(225 - side * 0.8, 620, -0.3);
-  drawCoon(1450 + side, 540 + bob(5), 66, -Math.sin(frame * 0.03) * 0.1, { hp: 30, maxHp: 30, blink: 170 });
-  drawCoon(1300 + side * 0.6, 640 + bob(6), 46, -0.12, { hp: 30, maxHp: 30, blink: 20 });
-  yarn(1378 + side * 0.8, 618);
-  // the three cats front and centre
-  drawCat(800, 530 + bob(1), 132, 0, 'cece');
-  drawCat(538, 568 + bob(0), 84, -0.08, 'baby');
-  drawCat(1065, 565 + bob(2), 92, 0.06, 'cleo');
+  // the raccoon gang, caught in the act on either side (pushed further out on wide phones)
+  const side = Math.max(0, uiShift) * 0.6;
+  const scene = (dx, ax, fn) => { ctx.save(); ctx.translate(dx + ax, MENU_FLOOR); ctx.scale(1.3, 1.3); ctx.translate(-ax, -MENU_FLOOR); fn(); ctx.restore(); };
+  scene(-side * 0.2 + 20, 220, drawGetaway);
+  scene(side * 0.5 + 40, 1400, drawJarRaid);
+  // the three cats front and centre, bright-eyed
+  drawCat(800, 530 + bob(1), 132, 0, 'cece', { bright: true });
+  drawCat(538, 568 + bob(0), 84, -0.08, 'baby', { bright: true });
+  drawCat(1065, 565 + bob(2), 92, 0.06, 'cleo', { bright: true });
   nameText('baby', 538, 690, 66);
   nameText('cece', 800, 712, 74);
   nameText('cleo', 1065, 690, 78);

@@ -677,13 +677,17 @@ function snapBand() {
   sfx.snap(); sfx.cat(CAT_SOUNDS.snap, 0.7, 0.12);
 }
 
+const inButton = (u, b) => Math.abs(u.x - b.x) <= b.w / 2 && Math.abs(u.y - b.y) <= b.h / 2;
+// Phones only allow full screen (and starting audio) when the finger lifts, not when it touches down,
+// so buttons marked onLift fire on pointerup.
+let liftButton = null;
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   sfx.init();
   const u = toUI(e);
   for (let i = uiButtons.length - 1; i >= 0; i--) {
     const b = uiButtons[i];
-    if (Math.abs(u.x - b.x) <= b.w / 2 && Math.abs(u.y - b.y) <= b.h / 2) { b.action(); return; }
+    if (inButton(u, b)) { if (b.onLift) liftButton = b; else b.action(); return; }
   }
   if (state !== 'play') return;
   const p = toWorld(e);
@@ -708,7 +712,11 @@ function release() {
   dragging = false;
   if (bandSnapped || Math.hypot(pull.x, pull.y) > 25) launch(); else pull = { x: 0, y: 0 };
 }
-canvas.addEventListener('pointerup', release);
+canvas.addEventListener('pointerup', e => {
+  sfx.init();   // a lifted finger is what unlocks sound on phones
+  if (liftButton) { const b = liftButton; liftButton = null; if (inButton(toUI(e), b)) b.action(); return; }
+  release();
+});
 canvas.addEventListener('pointercancel', release);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('keydown', e => {
@@ -798,11 +806,12 @@ function toggleFullscreen() {
     .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'))
     .catch(() => { /* not allowed here; the game still works */ });
 }
-function fullscreenButton(x, y) { if (canFullscreen) iconButton('fullscreen', x, y, toggleFullscreen); }
+function fullscreenButton(x, y) { if (canFullscreen) { iconButton('fullscreen', x, y, toggleFullscreen); uiButtons[uiButtons.length - 1].onLift = true; } }
 // a big, can't-miss button with the words on it; once full screen, only the small exit icon remains
 function bigFullscreenButton(x, y, w, h) {
   if (!canFullscreen || isFullscreen()) return false;
   button('Full screen', x, y, w, h, '#3d8bd9', toggleFullscreen);
+  uiButtons[uiButtons.length - 1].onLift = true;
   return true;
 }
 

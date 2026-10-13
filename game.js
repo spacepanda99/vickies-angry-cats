@@ -1025,6 +1025,7 @@ function drawCleo(r, t, opts) {
 }
 
 function drawCat(x, y, r, ang, type, opts = {}) {
+  opts = { bright: true, ...opts };   // bright, wide-open eyes everywhere
   const t = CATS[type];
   ctx.save();
   ctx.translate(x, y); ctx.rotate(ang);

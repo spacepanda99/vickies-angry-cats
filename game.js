@@ -42,7 +42,7 @@ const CATS = {
           power: 'shake', hint: 'Tap for the head shake!' },
   cleo: { name: 'Cleo', r: 34, density: 0.004, restitution: 0.3, friction: 0.5,
           body: '#f0c99a', dark: '#c98f58', belly: '#fffdf8', eye: '#b5d39c', patch: '#e6ae74',
-          power: 'pounce', hint: 'Tap to pounce!' },
+          power: 'prance', hint: 'Tap to prance!' },
 };
 
 // Each cat's name lettering (home screen and the 'is up!' banner).
@@ -170,6 +170,17 @@ const sfx = {
   },
   pop() { this.tone('sine', 260, 900, 0.16, 0.2); },
   zoom() { this.tone('square', 300, 1300, 0.25, 0.05); },
+  prance() { this.tone('triangle', 700, 1500, 0.14, 0.12); this.tone('triangle', 950, 1900, 0.12, 0.09, 0.07); },
+  creak() {
+    // a short wobbly wooden groan
+    if (!this.ok()) return;
+    const t = this.ac.currentTime, o = this.ac.createOscillator(), f = this.ac.createBiquadFilter();
+    const base = 70 + Math.random() * 30;
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(base, t); o.frequency.linearRampToValueAtTime(base * 1.6, t + 0.06); o.frequency.linearRampToValueAtTime(base * 0.9, t + 0.14);
+    f.type = 'bandpass'; f.frequency.value = 600; f.Q.value = 3;
+    o.connect(f); f.connect(this.env(t, 0.16, 0.14)); o.start(t); o.stop(t + 0.2);
+  },
   snap() { this.tone('square', 1800, 120, 0.18, 0.12); this.thud(0.6); },
   shake() { for (let i = 0; i < 6; i++) this.tone('triangle', i % 2 ? 260 : 340, i % 2 ? 300 : 220, 0.07, 0.13, i * 0.07); },
   ding() { this.tone('triangle', 1200, 1800, 0.15, 0.12); },
@@ -271,6 +282,8 @@ let frame = 0, lastThud = 0, launchedOnce = false, snapTimer = 0, bandSnapped = 
 let panning = null, panIdle = 999, introTimer = 0, fortCenter = 1700;
 // 'Baby is up!' ribbon: slides in from the left, holds, whooshes off right (t counts frames; negative = waiting)
 let upBanner = null;
+let snapStrain = 0;                 // frames CeCe has been held past the snap limit
+const SNAP_DELAY = 40;              // about 2/3 of a second of shaking and creaking before it breaks
 const BANNER_IN = 12, BANNER_HOLD = 52, BANNER_OUT = 12, BANNER_LEN = BANNER_IN + BANNER_HOLD + BANNER_OUT;
 
 function newEngine() {
@@ -324,7 +337,7 @@ function loadLevel(i) {
   current = queue.shift();
   phase = 'aim'; dragging = false; pull = { x: 0, y: 0 };
   flying = []; powerUsed = false; flyTimer = 0; outTimer = 0; winTimer = -1;
-  settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false;
+  settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
@@ -350,6 +363,8 @@ function kill(b) { if (b.game.dead) return; b.game.dead = true; toRemove.push(b)
 function onCollide(ev) {
   for (const p of ev.pairs) {
     const a = p.bodyA, b = p.bodyB, ga = a.game, gb = b.game;
+    if (ga && ga.prancing) ga.landed = true;
+    if (gb && gb.prancing) gb.landed = true;
     if (ga && gb) {
       if (ga.kind === 'cat' && gb.kind === 'loot') { gb.collected = true; kill(b); }
       else if (gb.kind === 'cat' && ga.kind === 'loot') { ga.collected = true; kill(a); }
@@ -405,7 +420,7 @@ function launch() {
   Composite.add(engine.world, body);
   sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.75 : 1);
   flying = [body]; current = null; phase = 'flying'; powerUsed = false; flyTimer = 0;
-  pull = { x: 0, y: 0 }; launchedOnce = true;
+  pull = { x: 0, y: 0 }; launchedOnce = true; snapStrain = 0;
 }
 
 function usePower() {
@@ -444,11 +459,11 @@ function usePower() {
         color: ['#93826f', '#fbfaf7', '#d9984f'][i % 3] });
     }
     sfx.shake();
-  } else if (t.power === 'pounce') {
-    const v = c.velocity, sp = Vector.magnitude(v);
-    if (sp > 0.1) Body.setVelocity(c, Vector.mult(Vector.normalise(v), Math.min(MAX_SPEED, Math.max(18, sp * 1.8))));
-    g.mult = 1.7; g.pounce = true;
-    sparkle(c.position, 6); sfx.zoom();
+  } else if (t.power === 'prance') {
+    // an elegant springy leap up and forward, then two more prances off whatever she lands on
+    Body.setVelocity(c, { x: Math.min(10, Math.max(6, Math.abs(c.velocity.x) * 0.6)), y: -10 });
+    g.mult = 1.6; g.prancing = true; g.prance = 2; g.landCool = 8;
+    sparkle(c.position, 8); sfx.prance();
   }
 }
 
@@ -477,6 +492,10 @@ function step() {
   Engine.update(engine, STEP);
   if (settle > 0) settle--;
   if (snapTimer > 0) snapTimer--;
+  if (state === 'play' && phase === 'aim' && dragging && current === 'cece' && !bandSnapped && Math.hypot(pull.x, pull.y) > SNAP_PULL) {
+    if (snapStrain % 9 === 0) sfx.creak();
+    if (++snapStrain >= SNAP_DELAY) snapBand();
+  } else snapStrain = 0;
 
   for (const b of bodies()) {
     if (b.isStatic) continue;
@@ -485,6 +504,18 @@ function step() {
       const sp = Vector.magnitude(b.velocity);
       if (sp > MAX_SPEED) Body.setVelocity(b, Vector.mult(b.velocity, MAX_SPEED / sp));
       if (g.shake > 0) g.shake--;
+      if (g.prancing) {
+        // stay upright and graceful; each landing springs her into the next prance
+        Body.setAngularVelocity(b, 0);
+        Body.setAngle(b, Math.atan2(Math.sin(b.angle), Math.cos(b.angle)) * 0.85);
+        if (g.landCool > 0) g.landCool--;
+        else if (g.landed && g.prance > 0) {
+          g.prance--; g.landCool = 10;
+          Body.setVelocity(b, { x: Math.max(Math.abs(b.velocity.x), 7.5), y: -9.5 });
+          sparkle(b.position, 6); sfx.prance();
+        }
+        g.landed = false;
+      }
       // rolling resistance on the floor, so a weak (snapped) roll peters out short of the fort
       if (b.position.y > GROUND - g.r - 3) Body.setVelocity(b, { x: b.velocity.x * 0.99, y: b.velocity.y });
       if (frame % 2 === 0) { g.trail.push({ x: b.position.x, y: b.position.y }); if (g.trail.length > 40) g.trail.shift(); }
@@ -586,13 +617,14 @@ function updatePull(p) {
   const r = CATS[current].r;
   if (SLING.y + dy > GROUND - r) dy = GROUND - r - SLING.y;
   pull = { x: dx, y: dy };
-  if (current === 'cece' && !bandSnapped && Math.hypot(dx, dy) > SNAP_PULL) {
-    // once it snaps it stays snapped: letting go just plops her out
-    bandSnapped = true; snapTimer = 100;
-    popups.push({ x: SLING.x, y: SLING.y - 110, text: 'SNAP! She\'s too heavy!', life: 90, big: true });
-    sparkle({ x: SLING.x, y: SLING.y - 5 }, 8);
-    sfx.snap();
-  }
+}
+// Over the limit with CeCe, the slingshot shakes and creaks for SNAP_DELAY frames before it gives way
+// (see step()); easing off in that window saves it. Once it snaps it stays snapped: letting go just plops her out.
+function snapBand() {
+  bandSnapped = true; snapTimer = 100; snapStrain = 0;
+  popups.push({ x: SLING.x, y: SLING.y - 110, text: 'SNAP! She\'s too heavy!', life: 90, big: true });
+  sparkle({ x: SLING.x, y: SLING.y - 5 }, 8);
+  sfx.snap();
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -717,6 +749,12 @@ function toggleFullscreen() {
     .catch(() => { /* not allowed here; the game still works */ });
 }
 function fullscreenButton(x, y) { if (canFullscreen) iconButton('fullscreen', x, y, toggleFullscreen); }
+// a big, can't-miss button with the words on it; once full screen, only the small exit icon remains
+function bigFullscreenButton(x, y, w, h) {
+  if (!canFullscreen || isFullscreen()) return false;
+  button('Full screen', x, y, w, h, '#3d8bd9', toggleFullscreen);
+  return true;
+}
 
 function hash(n) { const s = Math.sin(n) * 43758.5453; return s - Math.floor(s); }
 
@@ -1120,7 +1158,10 @@ function drawTrajectory() {
 }
 
 function drawWorld() {
-  drawSlingBack();
+  // while it's about to snap, the whole slingshot shakes harder and harder
+  const creak = snapStrain / SNAP_DELAY;
+  const sj = creak > 0 ? { x: (Math.random() - 0.5) * (3 + 8 * creak), y: (Math.random() - 0.5) * (2 + 4 * creak) } : { x: 0, y: 0 };
+  ctx.save(); ctx.translate(sj.x, sj.y); drawSlingBack(); ctx.restore();
   // waiting cats sit in line behind the slingshot
   // (spaced by size, so big CeCe doesn't overlap her neighbour)
   let qx = SLING.x - 45;
@@ -1134,9 +1175,9 @@ function drawWorld() {
   const loaded = phase === 'aim' && current;
   const strain = loaded && current === 'cece' && !bandSnapped
     ? Math.max(0, Math.min(1, (Math.hypot(pull.x, pull.y) - SNAP_PULL * 0.75) / (SNAP_PULL * 0.25))) : 0;
-  const jig = strain > 0.5 ? (Math.random() - 0.5) * 4 * strain : 0;     // the slingshot creaks under her
+  const jig = strain > 0.5 ? (Math.random() - 0.5) * (4 * strain + 10 * creak) : 0;
   const tip = { x: SLING.x + pull.x + jig, y: SLING.y + pull.y + jig };
-  if (loaded && !bandSnapped) band(SLING.x + 26, 646, tip.x + 6, tip.y, strain);
+  if (loaded && !bandSnapped) band(SLING.x + 26 + sj.x, 646 + sj.y, tip.x + 6, tip.y, strain);
   if (snapTimer > 0 || bandSnapped) snappedBands();
 
   const list = bodies().filter(b => b.game);
@@ -1148,7 +1189,7 @@ function drawWorld() {
     else if (g.kind === 'loot') drawLoot(b);
     else if (g.kind === 'coon') drawCoon(b.position.x, b.position.y, g.r, b.angle, g);
     else if (g.kind === 'cat') {
-      if (g.pounce || g.clone) {
+      if (g.prancing || g.clone) {
         g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, b.angle, g.type); });
         ctx.globalAlpha = 1;
       } else {
@@ -1172,9 +1213,9 @@ function drawWorld() {
   if (loaded) {
     if (dragging && !bandSnapped) drawTrajectory();
     drawCat(tip.x, tip.y, CATS[current].r, 0, current);
-    if (!bandSnapped) band(SLING.x - 24, 646, tip.x - 6, tip.y, strain);
+    if (!bandSnapped) band(SLING.x - 24 + sj.x, 646 + sj.y, tip.x - 6, tip.y, strain);
   }
-  drawSlingFront();
+  ctx.save(); ctx.translate(sj.x, sj.y); drawSlingFront(); ctx.restore();
 
   for (const p of particles) {
     const a = p.life / p.max;
@@ -1212,7 +1253,7 @@ function drawHUD() {
   text('Score ' + score.toLocaleString(), 36, 46, 40, '#fff', { align: 'left', stroke: '#2a1a4a', strokeW: 8 });
   text(`Level ${levelIdx + 1}: ${LEVELS[levelIdx].name}`, 36, 92, 24, '#e7dcff', { align: 'left', stroke: '#2a1a4a', strokeW: 6, weight: 500 });
   if (state === 'play') {
-    fullscreenButton(UW - 400, 56);
+    if (!bigFullscreenButton(UW - 545, 56, 260, 72)) fullscreenButton(UW - 400, 56);
     iconButton('music', UW - 315, 56, () => music.toggle());
     iconButton('sound', UW - 230, 56, () => { sfx.on = !sfx.on; saveAudio(); });
     iconButton('levels', UW - 145, 56, () => { state = 'levels'; });
@@ -1226,7 +1267,7 @@ function drawHUD() {
     if (panIdle < 100 || panning) hint = 'Looking around...';
   } else if (state === 'play' && phase === 'aim' && dragging && current === 'cece') {
     const d = Math.hypot(pull.x, pull.y);
-    hint = bandSnapped ? 'Oops! Let go and watch her plop...' : d > SNAP_PULL * 0.85 ? 'Easy... she\'s really heavy!' : null;
+    hint = bandSnapped ? 'Oops! Let go and watch her plop...' : snapStrain > 0 ? "It's creaking! Ease off!" : d > SNAP_PULL * 0.85 ? 'Easy... she\'s really heavy!' : null;
   } else if (state === 'play' && phase === 'flying' && !powerUsed && flying[0] && !flying[0].game.done) {
     hint = CATS[flying[0].game.type].hint;
   }
@@ -1336,16 +1377,16 @@ function drawMenu() {
   nameText('cece', 800, 712, 74);
   nameText('cleo', 1065, 690, 78);
   button('PLAY', W / 2, 818, 280, 84, '#4caf6a', () => { state = 'levels'; });
-  fullscreenButton(UW - uiShift - 60, 60);
-  iconButton('music', UW - uiShift - 145, 60, () => music.toggle());
+  if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) fullscreenButton(UW - uiShift - 60, 60);
+  iconButton('music', UW - uiShift - (canFullscreen && !isFullscreen() ? 420 : 145), 60, () => music.toggle());
 }
 
 function drawLevels() {
   ctx.fillStyle = 'rgba(30,50,60,0.3)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
   text('Pick a level', W / 2, 120, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
   iconButton('back', 80 - uiShift + 20, 80, () => { state = 'menu'; });
-  fullscreenButton(UW - uiShift - 60, 60);
-  iconButton('music', UW - uiShift - 145, 60, () => music.toggle());
+  if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) fullscreenButton(UW - uiShift - 60, 60);
+  iconButton('music', UW - uiShift - (canFullscreen && !isFullscreen() ? 420 : 145), 60, () => music.toggle());
   LEVELS.forEach((lv, i) => {
     const col = i % 3, row = Math.floor(i / 3);
     const x = 520 + col * 280, y = 330 + row * 250, w = 230, h = 200;

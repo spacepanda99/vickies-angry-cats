@@ -45,6 +45,22 @@ const CATS = {
           power: 'prance', hint: 'Tap to prance!' },
 };
 
+// Which recorded cat noise plays when. All the clips are in sounds/ (audition them on sounds.html);
+// swap names here to change a sound.
+const CAT_SOUNDS = {
+  launch: { baby: 'mew-1', cece: 'big-meow-1', cleo: 'meow-1' },
+  power: { baby: 'chirp-1', cece: 'hiss-1', cleo: 'chirp-2' },
+  chatter: { baby: ['mew-4', 'mew-5', 'chirp-3'], cece: ['mrrow', 'meow-5', 'big-meow-4'], cleo: ['meow-7', 'mew-6', 'meow-8'] },
+  win: 'mew-2', lose: 'sad-meow', snap: 'mrrow',
+};
+function catSoundFiles() {
+  const s = new Set();
+  const add = v => { if (typeof v === 'string') s.add(v); else Object.values(v).flat().forEach(x => s.add(x)); };
+  Object.values(CAT_SOUNDS).forEach(add);
+  return [...s];
+}
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
 // Each cat's name lettering (home screen and the 'is up!' banner).
 const NAME_STYLE = {
   baby: { font: 'Bangers, Impact, sans-serif', weight: 400, fill: '#e9e9ee', stroke: '#4a4856' },
@@ -137,6 +153,7 @@ const sfx = {
     if (this.ac && this.ac.state === 'suspended') this.ac.resume();
     this.loadSample('win', 'jingle-win.ogg');
     this.loadSample('lose', 'jingle-lose.ogg');
+    for (const n of catSoundFiles()) this.loadSample('cat:' + n, 'sounds/' + n + '.ogg');
   },
   ok() { return this.on && this.ac; },
   env(t, dur, vol) {
@@ -192,13 +209,16 @@ const sfx = {
     fetch(url).then(r => r.arrayBuffer()).then(b => new Promise((res, rej) => this.ac.decodeAudioData(b, res, rej)))
       .then(buf => { this.samples[name] = buf; }).catch(() => { /* keep the synth fallback */ });
   },
-  playSample(name, vol) {
+  playSample(name, vol, delay = 0, rate = 1) {
     const buf = this.samples[name];
     if (!this.ok() || !buf) return false;
     const src = this.ac.createBufferSource(), g = this.ac.createGain();
-    src.buffer = buf; g.gain.value = vol; src.connect(g); g.connect(this.ac.destination); src.start();
+    src.buffer = buf; src.playbackRate.value = rate; g.gain.value = vol;
+    src.connect(g); g.connect(this.ac.destination); src.start(this.ac.currentTime + delay);
     return true;
   },
+  // the real cat noises (cut from Vickie's recording, files in sounds/); slight pitch wobble so repeats sound alive
+  cat(name, vol = 0.6, delay = 0) { return this.playSample('cat:' + name, vol, delay, 0.95 + Math.random() * 0.1); },
   win() {
     if (this.playSample('win', 0.25)) return;
     [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13));
@@ -282,7 +302,29 @@ let frame = 0, lastThud = 0, launchedOnce = false, snapTimer = 0, bandSnapped = 
 let panning = null, panIdle = 999, introTimer = 0, fortCenter = 1700;
 // 'Baby is up!' ribbon: slides in from the left, holds, whooshes off right (t counts frames; negative = waiting)
 let upBanner = null;
-let snapStrain = 0;                 // frames CeCe has been held past the snap limit
+// The cats "plotting" before a level: each in turn hops, mews and pops a little speech bubble.
+// who = place in line (0 = on the slingshot), t = frames until it happens, life = frames left on screen.
+let chatter = [];
+const CHATTER_LIFE = 36, CHATTER_SYMBOLS = ['!', '♥', '?!', '♪', '>:3'];
+function scheduleChatter(lineup, start) {
+  chatter = [];
+  lineup.forEach((type, who) => chatter.push({ type, who, t: start + who * 24, life: CHATTER_LIFE, sym: CHATTER_SYMBOLS[(who * 2 + levelIdx) % CHATTER_SYMBOLS.length] }));
+  chatter.push({ type: lineup[0], who: 0, t: start + lineup.length * 24 + 8, life: CHATTER_LIFE, sym: '!' });   // the leader has the last word
+}
+function chatterAt(who) { return chatter.find(c => c.who === who && c.t <= 0 && c.life > 0); }
+function chatterHop(who) { const c = chatterAt(who); return c ? Math.sin((1 - c.life / CHATTER_LIFE) * Math.PI) * 16 : 0; }
+function chatterBubble(who, x, y) {
+  const c = chatterAt(who); if (!c) return;
+  const a = Math.min(1, c.life / 8), s = 0.7 + 0.3 * Math.min(1, (CHATTER_LIFE - c.life) / 6);
+  ctx.save(); ctx.globalAlpha *= a; ctx.translate(x, y); ctx.scale(s, s);
+  ctx.fillStyle = '#ffffff'; rr(-30, -26, 60, 44, 18); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-8, 16); ctx.lineTo(-2, 30); ctx.lineTo(8, 16); ctx.closePath(); ctx.fill();
+  text(c.sym, 0, -4, 28, c.sym === '♥' ? '#e8578f' : '#3a2160');
+  ctx.restore();
+}
+let menuHop = {};                   // home screen: when each cat was last tapped
+
+let snapStrain = 0;               // frames CeCe has been held past the snap limit
 const SNAP_DELAY = 40;              // about 2/3 of a second of shaking and creaking before it breaks
 const BANNER_IN = 12, BANNER_HOLD = 52, BANNER_OUT = 12, BANNER_LEN = BANNER_IN + BANNER_HOLD + BANNER_OUT;
 
@@ -341,7 +383,8 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
-  upBanner = { type: current, t: -95 };   // after the camera glides back from the fort
+  scheduleChatter([current, ...queue], 105);   // plotting while the camera glides back from the fort
+  upBanner = { type: current, t: -(105 + (queue.length + 1) * 24 + 40) };   // then whose turn it is
   cam.x = clampCamX(fortCenter - viewW / 2); cam.y = CAM_TOP;
   state = 'play';
 }
@@ -418,7 +461,7 @@ function launch() {
   }
   Body.setAngularVelocity(body, snapped ? 0.02 : -pull.x * 0.0012);
   Composite.add(engine.world, body);
-  sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.75 : 1);
+  if (!sfx.cat(CAT_SOUNDS.launch[current], 0.7)) sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.75 : 1);
   flying = [body]; current = null; phase = 'flying'; powerUsed = false; flyTimer = 0;
   pull = { x: 0, y: 0 }; launchedOnce = true; snapStrain = 0;
 }
@@ -436,7 +479,7 @@ function usePower() {
       Body.setVelocity(nb, Vector.rotate(c.velocity, ang));
       Composite.add(engine.world, nb); flying.push(nb);
     }
-    poof(c.position, 6, 0.6); sfx.pop();
+    poof(c.position, 6, 0.6); sfx.pop(); sfx.cat(CAT_SOUNDS.power.baby, 0.6);
   } else if (t.power === 'shake') {
     // CeCe's signature fast head shake: a blast of fur that shoves and dents everything nearby
     g.shake = 42;
@@ -458,12 +501,12 @@ function usePower() {
         vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, s: rand(7, 14), rot: a, vr: rand(-0.2, 0.2), life: 45, max: 45,
         color: ['#93826f', '#fbfaf7', '#d9984f'][i % 3] });
     }
-    sfx.shake();
+    sfx.shake(); sfx.cat(CAT_SOUNDS.power.cece, 0.55);
   } else if (t.power === 'prance') {
     // an elegant springy leap up and forward, then two more prances off whatever she lands on
     Body.setVelocity(c, { x: Math.min(10, Math.max(6, Math.abs(c.velocity.x) * 0.6)), y: -10 });
     g.mult = 1.6; g.prancing = true; g.prance = 2; g.landCool = 8;
-    sparkle(c.position, 8); sfx.prance();
+    sparkle(c.position, 8); sfx.prance(); sfx.cat(CAT_SOUNDS.power.cleo, 0.6);
   }
 }
 
@@ -482,6 +525,13 @@ function step() {
   }
   particles = particles.filter(p => p.life > 0);
   for (const p of popups) { p.life--; p.y -= 0.8; }
+  if (state === 'play') {
+    for (const c of chatter) {
+      if (c.t > 0) { if (--c.t === 0) sfx.cat(pick(CAT_SOUNDS.chatter[c.type]), 0.5); }
+      else c.life--;
+    }
+    chatter = chatter.filter(c => c.life > 0);
+  }
   if (upBanner) {
     if (upBanner.t === 0) sfx.tone('sine', 260, 1100, 0.18, 0.06);   // whoosh
     if (++upBanner.t > BANNER_LEN) upBanner = null;
@@ -560,11 +610,11 @@ function updatePhase() {
     if (allDone) {
       for (const c of flying) { if (c.position.y < H + 200) poof(c.position, 6, c.game.r / 26); Composite.remove(engine.world, c); }
       flying = [];
-      if (queue.length) { current = queue.shift(); phase = 'aim'; panIdle = 999; upBanner = { type: current, t: 0 }; }
+      if (queue.length) { current = queue.shift(); phase = 'aim'; panIdle = 999; upBanner = { type: current, t: 0 }; chatter = [{ type: current, who: 0, t: 8, life: CHATTER_LIFE, sym: '!' }]; }
       else { phase = 'out'; outTimer = 150; }
     }
   } else if (phase === 'out') {
-    if (--outTimer <= 0) { state = 'lost'; sfx.lose(); music.duck(2.6); }
+    if (--outTimer <= 0) { state = 'lost'; sfx.lose(); music.duck(2.6); sfx.cat(CAT_SOUNDS.lose, 0.6, 2.2); }
   }
 }
 
@@ -576,7 +626,7 @@ function finishWin() {
   bestStars[levelIdx] = Math.max(bestStars[levelIdx] || 0, stars);
   saveStars();
   state = 'won';
-  sfx.win(); music.duck(3.2);
+  sfx.win(); music.duck(3.2); sfx.cat(CAT_SOUNDS.win, 0.55, 2.6);
 }
 
 // ---------------------------------------------------------------- camera
@@ -624,7 +674,7 @@ function snapBand() {
   bandSnapped = true; snapTimer = 100; snapStrain = 0;
   popups.push({ x: SLING.x, y: SLING.y - 110, text: 'SNAP! She\'s too heavy!', life: 90, big: true });
   sparkle({ x: SLING.x, y: SLING.y - 5 }, 8);
-  sfx.snap();
+  sfx.snap(); sfx.cat(CAT_SOUNDS.snap, 0.7, 0.12);
 }
 
 canvas.addEventListener('pointerdown', e => {
@@ -1167,9 +1217,10 @@ function drawWorld() {
   // (spaced by size, so big CeCe doesn't overlap her neighbour)
   let qx = SLING.x - 45;
   queue.forEach((type, i) => {
-    const r = CATS[type].r * 0.75, bob = Math.sin(frame * 0.05 + i) * 2;
+    const r = CATS[type].r * 0.75, bob = Math.sin(frame * 0.05 + i) * 2 - chatterHop(i + 1);
     qx -= r * 1.15;
-    drawCat(qx, GROUND - r + bob, r, 0, type, { calm: true });
+    drawCat(qx, GROUND - r + bob, r, 0, type, { calm: !chatterAt(i + 1) });
+    chatterBubble(i + 1, qx + r * 0.3, GROUND - r * 2.3 + bob);
     qx -= r * 1.15 + 6;
   });
 
@@ -1213,7 +1264,9 @@ function drawWorld() {
 
   if (loaded) {
     if (dragging && !bandSnapped) drawTrajectory();
-    drawCat(tip.x, tip.y, CATS[current].r, 0, current);
+    const hop = dragging ? 0 : chatterHop(0);
+    drawCat(tip.x, tip.y - hop, CATS[current].r, 0, current);
+    chatterBubble(0, tip.x + CATS[current].r * 0.4, tip.y - hop - CATS[current].r * 1.75);
     if (!bandSnapped) band(SLING.x - 24 + sj.x, 646 + sj.y, tip.x - 6, tip.y, strain);
   }
   ctx.save(); ctx.translate(sj.x, sj.y); drawSlingFront(); ctx.restore();
@@ -1432,9 +1485,18 @@ function drawMenu() {
   scene(-side * 0.2 + 20, 220, drawGetaway);
   scene(side * 0.5 + 40, 1400, drawJarRaid);
   // the three cats front and centre, bright-eyed
-  drawCat(800, 530 + bob(1), 132, 0, 'cece', { bright: true });
-  drawCat(538, 568 + bob(0), 84, -0.08, 'baby', { bright: true });
-  drawCat(1065, 565 + bob(2), 92, 0.06, 'cleo', { bright: true });
+  // tap a cat and she hops and meows
+  const hopOf = type => { const k = (frame - (menuHop[type] || -99)) / 24; return k >= 0 && k < 1 ? Math.sin(k * Math.PI) * 34 : 0; };
+  const tapCat = type => () => {
+    menuHop[type] = frame;
+    if (!sfx.cat(pick(CAT_SOUNDS.chatter[type]), 0.65)) sfx.meow(type === 'baby' ? 1.25 : type === 'cece' ? 0.75 : 1);
+  };
+  for (const [type, x, y, r] of [['cece', 800, 530, 132], ['baby', 538, 568, 84], ['cleo', 1065, 565, 92]]) {
+    uiButtons.push({ x: x + uiShift, y, w: r * 2, h: r * 2.2, action: tapCat(type) });
+  }
+  drawCat(800, 530 + bob(1) - hopOf('cece'), 132, 0, 'cece', { bright: true });
+  drawCat(538, 568 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', { bright: true });
+  drawCat(1065, 565 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', { bright: true });
   nameText('baby', 538, 690, 66);
   nameText('cece', 800, 712, 74);
   nameText('cleo', 1065, 690, 78);

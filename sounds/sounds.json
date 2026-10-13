@@ -1,0 +1,226 @@
+[
+ {
+  "name": "mew-1",
+  "label": "kitten mew (high)",
+  "seconds": 0.7,
+  "pitch": 1143,
+  "sourceAt": 63.84
+ },
+ {
+  "name": "mew-2",
+  "label": "kitten mew",
+  "seconds": 0.88,
+  "pitch": 1000,
+  "sourceAt": 66.14
+ },
+ {
+  "name": "mew-3",
+  "label": "kitten mew",
+  "seconds": 0.88,
+  "pitch": 1067,
+  "sourceAt": 67.24
+ },
+ {
+  "name": "mew-4",
+  "label": "short mew",
+  "seconds": 0.62,
+  "pitch": 667,
+  "sourceAt": 85.9
+ },
+ {
+  "name": "mew-5",
+  "label": "short mew",
+  "seconds": 0.6,
+  "pitch": 762,
+  "sourceAt": 86.92
+ },
+ {
+  "name": "mew-6",
+  "label": "soft mew",
+  "seconds": 0.7,
+  "pitch": 640,
+  "sourceAt": 81.4
+ },
+ {
+  "name": "mew-7",
+  "label": "short mew",
+  "seconds": 0.7,
+  "pitch": 762,
+  "sourceAt": 520.68
+ },
+ {
+  "name": "mew-8",
+  "label": "soft mew",
+  "seconds": 0.96,
+  "pitch": 762,
+  "sourceAt": 361.08
+ },
+ {
+  "name": "mew-9",
+  "label": "soft mew",
+  "seconds": 0.98,
+  "pitch": 762,
+  "sourceAt": 367.8
+ },
+ {
+  "name": "mew-10",
+  "label": "soft mew",
+  "seconds": 0.98,
+  "pitch": 762,
+  "sourceAt": 73.48
+ },
+ {
+  "name": "meow-1",
+  "label": "meow",
+  "seconds": 0.9,
+  "pitch": 727,
+  "sourceAt": 92.78
+ },
+ {
+  "name": "meow-2",
+  "label": "meow",
+  "seconds": 0.86,
+  "pitch": 727,
+  "sourceAt": 94.06
+ },
+ {
+  "name": "meow-3",
+  "label": "meow",
+  "seconds": 0.9,
+  "pitch": 667,
+  "sourceAt": 95.32
+ },
+ {
+  "name": "meow-4",
+  "label": "meow",
+  "seconds": 0.98,
+  "pitch": 552,
+  "sourceAt": 313.64
+ },
+ {
+  "name": "meow-5",
+  "label": "meow",
+  "seconds": 1.28,
+  "pitch": 516,
+  "sourceAt": 325.66
+ },
+ {
+  "name": "meow-6",
+  "label": "meow",
+  "seconds": 1.68,
+  "pitch": 615,
+  "sourceAt": 515.54
+ },
+ {
+  "name": "meow-7",
+  "label": "meow",
+  "seconds": 0.86,
+  "pitch": 640,
+  "sourceAt": 531.88
+ },
+ {
+  "name": "meow-8",
+  "label": "meow",
+  "seconds": 0.92,
+  "pitch": 696,
+  "sourceAt": 535.46
+ },
+ {
+  "name": "big-meow-1",
+  "label": "lower meow",
+  "seconds": 1.36,
+  "pitch": 410,
+  "sourceAt": 88
+ },
+ {
+  "name": "big-meow-2",
+  "label": "long low meow",
+  "seconds": 2.56,
+  "pitch": 320,
+  "sourceAt": 412.04
+ },
+ {
+  "name": "big-meow-3",
+  "label": "long meow",
+  "seconds": 2.48,
+  "pitch": 356,
+  "sourceAt": 401.86
+ },
+ {
+  "name": "big-meow-4",
+  "label": "long meow",
+  "seconds": 1.98,
+  "pitch": 471,
+  "sourceAt": 144.44
+ },
+ {
+  "name": "sad-meow",
+  "label": "low short meow",
+  "seconds": 0.82,
+  "pitch": 400,
+  "sourceAt": 89.54
+ },
+ {
+  "name": "mrrow",
+  "label": "rough mrrow",
+  "seconds": 1.2,
+  "pitch": 500,
+  "sourceAt": 78.54
+ },
+ {
+  "name": "chirp-1",
+  "label": "chirp",
+  "seconds": 0.48,
+  "pitch": 842,
+  "sourceAt": 85.3
+ },
+ {
+  "name": "chirp-2",
+  "label": "chirp",
+  "seconds": 0.44,
+  "pitch": 696,
+  "sourceAt": 377.76
+ },
+ {
+  "name": "chirp-3",
+  "label": "chirp",
+  "seconds": 0.4,
+  "pitch": 727,
+  "sourceAt": 538.58
+ },
+ {
+  "name": "chirp-4",
+  "label": "high chirp",
+  "seconds": 0.5,
+  "pitch": 1600,
+  "sourceAt": 11.4
+ },
+ {
+  "name": "chirp-5",
+  "label": "chirp",
+  "seconds": 0.54,
+  "pitch": 471,
+  "sourceAt": 59.96
+ },
+ {
+  "name": "chirp-6",
+  "label": "chirp",
+  "seconds": 0.44,
+  "pitch": 500,
+  "sourceAt": 113.32
+ },
+ {
+  "name": "hiss-1",
+  "label": "hiss",
+  "seconds": 0.42,
+  "pitch": 593,
+  "sourceAt": 30.16
+ },
+ {
+  "name": "hiss-2",
+  "label": "hiss",
+  "seconds": 0.32,
+  "pitch": 410,
+  "sourceAt": 117.78
+ }
+]

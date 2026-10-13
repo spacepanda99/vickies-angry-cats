@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cat Sound Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;700&display=swap">
+<style>
+  :root { --bg: #e6f4ef; --card: #ffffff; --ink: #2d2343; --muted: #6d6680; --accent: #3d8bd9; --used: #ffe9a8; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #1d1a2a; --card: #2a2640; --ink: #f2eefb; --muted: #b3abc8; --accent: #6aa9ec; --used: #5a4a1e; } }
+  :root[data-theme="dark"] { --bg: #1d1a2a; --card: #2a2640; --ink: #f2eefb; --muted: #b3abc8; --accent: #6aa9ec; --used: #5a4a1e; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: Fredoka, 'Segoe UI', sans-serif; }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 40px; }
+  h1 { margin: 0 0 4px; font-size: 28px; }
+  p { margin: 0 0 18px; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  button { font: inherit; border: 0; border-radius: 16px; background: var(--card); color: var(--ink); padding: 14px 12px; text-align: left; cursor: pointer; box-shadow: 0 2px 0 rgba(0,0,0,0.08); min-height: 74px; }
+  button:active { transform: translateY(1px); }
+  button.used { background: var(--used); }
+  .name { font-weight: 700; font-size: 18px; }
+  .meta { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .role { font-size: 13px; margin-top: 4px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cat sound board</h1>
+  <p>Tap to listen. Highlighted ones are already in the game (it says where). Tell Claude the names you like and where to use them. <a href="./">Back to the game</a></p>
+  <div class="grid" id="grid"></div>
+</main>
+<script>
+(async () => {
+  const grid = document.getElementById('grid');
+  const sounds = await (await fetch('sounds/sounds.json')).json();
+  // read the game's own CAT_SOUNDS table so this page always shows what's really in use
+  const roles = {};
+  try {
+    const src = await (await fetch('game.js')).text();
+    const m = src.match(/const CAT_SOUNDS = (\{[\s\S]*?\n\});/);
+    const table = Function('return ' + m[1])();
+    for (const [moment, v] of Object.entries(table)) {
+      if (typeof v === 'string') (roles[v] = roles[v] || []).push(moment);
+      else for (const [cat, n] of Object.entries(v)) for (const x of [].concat(n)) (roles[x] = roles[x] || []).push(`${cat} ${moment}`);
+    }
+  } catch (e) { /* page still works without the labels */ }
+  let playing = null;
+  for (const s of sounds) {
+    const b = document.createElement('button');
+    if (roles[s.name]) b.className = 'used';
+    b.innerHTML = `<div class="name">${s.name}</div><div class="meta">${s.label} · ${s.seconds}s</div>` +
+      (roles[s.name] ? `<div class="role">${roles[s.name].join(', ')}</div>` : '');
+    b.onclick = () => { if (playing) playing.pause(); playing = new Audio(`sounds/${s.name}.ogg`); playing.play(); };
+    grid.appendChild(b);
+  }
+})();
+</script>
+</body>
+</html>

@@ -1317,7 +1317,11 @@ function drawHUD() {
   text('Score ' + score.toLocaleString(), 36, 46, 40, '#fff', { align: 'left', stroke: '#2a1a4a', strokeW: 8 });
   text(`Level ${levelIdx + 1}: ${LEVELS[levelIdx].name}`, 36, 92, 24, '#e7dcff', { align: 'left', stroke: '#2a1a4a', strokeW: 6, weight: 500 });
   if (state === 'play') {
-    if (!bigFullscreenButton(UW - 545, 56, 260, 72)) fullscreenButton(UW - 400, 56);
+    if (!bigFullscreenButton(UW - 545, 56, 260, 72) && canFullscreen) {
+      // in full screen: a plain 'Exit' button to leave it
+      button('Exit', UW - 432, 56, 150, 72, '#d0574f', toggleFullscreen);
+      uiButtons[uiButtons.length - 1].onLift = true;
+    }
     iconButton('music', UW - 315, 56, () => music.toggle());
     iconButton('sound', UW - 230, 56, () => { sfx.on = !sfx.on; saveAudio(); });
     iconButton('levels', UW - 145, 56, () => { state = 'levels'; });

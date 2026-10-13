@@ -1429,57 +1429,39 @@ function menuLoot(type, x, y, a, s) {
   drawLoot({ position: { x: 0, y: 0 }, angle: 0, game: { type } });
   ctx.restore();
 }
-// left: one tiptoes off with a stuffed loot sack while the lookout shines a flashlight and shushes
-function drawGetaway() {
-  const tip = Math.abs(Math.sin(frame * 0.12)) * 10;          // sneaky tiptoe bounce
-  const x = 215, y = MENU_FLOOR - 52 - tip;
-  // the sack, slung over the shoulder
-  ctx.fillStyle = '#b98b5a';
-  ctx.beginPath(); ctx.ellipse(x - 70, y - 30, 64, 56, -0.3, 0, 7); ctx.fill();
-  ctx.strokeStyle = '#8a6438'; ctx.lineWidth = 3; ctx.stroke();
-  ctx.fillStyle = '#a07646'; ctx.beginPath(); ctx.moveTo(x - 30, y - 82); ctx.lineTo(x - 12, y - 100); ctx.lineTo(x - 6, y - 80); ctx.closePath(); ctx.fill();
-  menuLoot('fish', x - 92, y - 84, -0.8, 1.7);
-  menuLoot('yarn', x - 52, y - 92, 0, 1.4);
-  ctx.fillStyle = '#7a5a34'; ctx.font = `700 26px ${FONT}`; ctx.textAlign = 'center'; ctx.fillText('LOOT', x - 92, y - 12);
-  drawCoon(x, y, 52, -0.12, { hp: 30, maxHp: 30, blink: 50 });
-  coonArm(x - 22, y + 10, x - 30, y - 62, 11);                   // gripping the sack
-  // the lookout with a flashlight
-  const lx = 345, ly = MENU_FLOOR - 40;
-  ctx.fillStyle = 'rgba(255,240,150,0.28)';
-  ctx.beginPath(); ctx.moveTo(lx - 30, ly - 22); ctx.lineTo(lx - 175, ly - 150); ctx.lineTo(lx - 205, ly - 75); ctx.closePath(); ctx.fill();
-  drawCoon(lx, ly, 40, 0.08, { hp: 30, maxHp: 30, blink: 120 });
-  ctx.fillStyle = '#4b4f57'; ctx.save(); ctx.translate(lx - 32, ly - 18); ctx.rotate(-0.7); ctx.fillRect(-14, -6, 28, 12); ctx.fillStyle = '#ffe680'; ctx.fillRect(-18, -7, 6, 14); ctx.restore();
-  coonArm(lx - 10, ly + 10, lx - 28, ly - 14, 9);
-  // "Shh!" bubble
-  const bx = lx + 30, by = ly - 88;
-  ctx.fillStyle = '#ffffff'; rr(bx - 46, by - 24, 92, 48, 22); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(bx - 14, by + 22); ctx.lineTo(bx - 26, by + 40); ctx.lineTo(bx + 2, by + 22); ctx.closePath(); ctx.fill();
-  text('Shh!', bx, by + 1, 28, '#3a2160');
-}
-// right: a two-raccoon tower raiding the treat jar on a side table
-function drawJarRaid() {
-  const tx = 1400, top = 640;
-  // side table
-  ctx.fillStyle = '#c9a27a'; rr(tx - 105, top, 210, 16, 4); ctx.fill();
-  ctx.fillStyle = '#b08a62'; ctx.fillRect(tx - 92, top + 16, 14, MENU_FLOOR - top - 16); ctx.fillRect(tx + 78, top + 16, 14, MENU_FLOOR - top - 16);
-  // the treat jar, lid knocked off
-  const jx = tx + 42, jy = top - 50;
-  ctx.fillStyle = 'rgba(205,235,255,0.75)'; rr(jx - 42, jy - 50, 84, 100, 16); ctx.fill();
-  ctx.strokeStyle = '#7fb6d8'; ctx.lineWidth = 3; ctx.stroke();
-  for (const [dx, dy, a] of [[-16, 26, 0.3], [14, 30, -0.4], [-4, 8, 0.1], [18, 6, 2.8]]) menuLoot('fish', jx + dx, jy + dy, a, 1.0);
-  ctx.fillStyle = '#ffffff'; ctx.fillRect(jx - 42, jy - 18, 84, 22);
-  text('TREATS', jx, jy - 7, 17, '#e05a5a');
-  ctx.save(); ctx.translate(tx - 60, top - 8); ctx.rotate(-0.25); ctx.fillStyle = '#e05a5a'; rr(-30, -8, 60, 16, 6); ctx.fill(); ctx.restore();
-  // bottom raccoon straining under the top one
-  const wob = Math.sin(frame * 0.09);
-  const bx = tx - 120, by = MENU_FLOOR - 56;
-  drawCoon(bx, by, 56, 0.06 * wob, { hp: 30, maxHp: 30, blink: 170 });
-  ctx.fillStyle = '#9fd3f5'; ctx.beginPath(); ctx.ellipse(bx + 50, by - 34, 6, 9, 0.3, 0, 7); ctx.fill();   // sweat drop
-  // top raccoon stretching over to the jar, fish in paw
-  const ux = bx + 12 + wob * 4, uy = by - 100;
-  drawCoon(ux, uy, 44, 0.25 + wob * 0.06, { hp: 30, maxHp: 30, blink: 20 });
-  coonArm(ux + 26, uy + 6, jx - 18, jy - 44 + wob * 3, 11);
-  menuLoot('fish', jx - 10, jy - 58 + wob * 3, -0.5, 1.3);
+// the whole gang huddled off to the side, plotting over the boss's plan
+function drawHuddle() {
+  const cx = 1380, w = k => Math.sin(frame * 0.07 + k);
+  const coon = (x, y, r, tilt, k, boss) => drawCoon(x, y - Math.max(0, w(k)) * 4, r, tilt + w(k) * 0.05, { hp: 30, maxHp: 30, blink: k * 53, boss });
+  coon(cx - 122, 682, 46, 0.32, 1);
+  coon(cx + 122, 682, 46, -0.32, 2);
+  coon(cx, 612, 56, 0, 0, true);
+  // the plan, held up by the boss: a blueprint of the treat jar heist
+  ctx.save(); ctx.translate(cx, 708 + w(0) * 2); ctx.rotate(-0.04);
+  ctx.fillStyle = '#3b6fb5'; rr(-74, -50, 148, 100, 6); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.strokeRect(-56, -14, 34, 44); ctx.beginPath(); ctx.moveTo(-60, -18); ctx.lineTo(-18, -18); ctx.stroke();   // the jar
+  ctx.setLineDash([6, 6]); ctx.beginPath(); ctx.moveTo(-12, 10); ctx.quadraticCurveTo(20, -40, 46, 0); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(38, -2); ctx.lineTo(48, 2); ctx.lineTo(44, -10); ctx.stroke();
+  ctx.strokeStyle = '#ff6f6f'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(40, 14); ctx.lineTo(56, 30); ctx.moveTo(56, 14); ctx.lineTo(40, 30); ctx.stroke();   // X marks the spot
+  text('PLAN', 0, -34, 18, '#ffffff');
+  ctx.restore();
+  coonArm(cx - 30, 640, cx - 62, 672 + w(0) * 2, 11);
+  coonArm(cx + 30, 640, cx + 62, 672 + w(0) * 2, 11);
+  // the little ones up front, leaning in to listen
+  coon(cx - 88, MENU_FLOOR - 38, 38, 0.38, 3);
+  coon(cx + 92, MENU_FLOOR - 38, 38, -0.38, 4);
+  // whispered schemes
+  const lines = ['psst...', 'the TREATS!', 'heh heh heh', 'shhh!'];
+  const li = Math.floor(frame / 110) % lines.length, fade = Math.min(1, (frame % 110) / 10, (110 - frame % 110) / 10);
+  ctx.save(); ctx.globalAlpha *= fade;
+  ctx.font = `700 26px ${FONT}`;
+  const bw = ctx.measureText(lines[li]).width + 40, by = 500;
+  ctx.fillStyle = '#ffffff'; rr(cx - bw / 2, by - 26, bw, 52, 24); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx - 10, by + 24); ctx.lineTo(cx - 4, by + 44); ctx.lineTo(cx + 10, by + 24); ctx.closePath(); ctx.fill();
+  text(lines[li], cx, by + 1, 26, '#3a2160');
+  ctx.restore();
 }
 
 function drawMenu() {
@@ -1488,11 +1470,9 @@ function drawMenu() {
   text('ANGRY CATS', W / 2, 205, 124, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
   text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 293, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
-  // the raccoon gang, caught in the act on either side (pushed further out on wide phones)
+  // the raccoon gang huddled together off to the right, away from the cats (further out on wide phones)
   const side = Math.max(0, uiShift) * 0.6;
-  const scene = (dx, ax, fn) => { ctx.save(); ctx.translate(dx + ax, MENU_FLOOR); ctx.scale(1.3, 1.3); ctx.translate(-ax, -MENU_FLOOR); fn(); ctx.restore(); };
-  scene(-side * 0.2 + 20, 220, drawGetaway);
-  scene(side * 0.5 + 40, 1400, drawJarRaid);
+  ctx.save(); ctx.translate(side * 0.6 + 1380, MENU_FLOOR); ctx.scale(1.12, 1.12); ctx.translate(-1380, -MENU_FLOOR); drawHuddle(); ctx.restore();
   // the three cats front and centre, bright-eyed
   // tap a cat and she hops and meows
   const hopOf = type => { const k = (frame - (menuHop[type] || -99)) / 24; return k >= 0 && k < 1 ? Math.sin(k * Math.PI) * 34 : 0; };

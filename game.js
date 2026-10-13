@@ -3,7 +3,7 @@
 // Everything is drawn in code on one canvas. Physics is Matter.js 0.19 (velocities are per 60Hz step).
 // The world is wider than the screen: a camera scrolls between the slingshot and the fort, like Angry Birds.
 
-const { Engine, Bodies, Body, Composite, Events, Vector, Sleeping } = Matter;
+const { Engine, Bodies, Body, Composite, Constraint, Events, Vector, Sleeping } = Matter;
 
 const W = 1600, H = 900, GROUND = 820;     // W x H is the menu/HUD design size; H is also the world height
 const WORLD_W = 2500;                      // the level is this wide; the screen only shows part of it
@@ -30,6 +30,13 @@ const MATS = {
   wood:  { density: 0.002, health: 70,  fill: '#d0914f', edge: '#7a4a22', points: 500 },
   glass: { density: 0.001, health: 30,  fill: 'rgba(175,225,255,0.55)', edge: '#6fb6e3', points: 300 },
   stone: { density: 0.004, health: 260, fill: '#a0a6ae', edge: '#5b6068', points: 800 },
+  // levels 7-10
+  book:   { density: 0.0018, health: 60, fill: '#e98f8f', edge: '#8a4b4b', points: 400 },             // domino books
+  catnip: { density: 0.0015, health: 22, fill: '#8fd07a', edge: '#3f7a3c', points: 300, explodes: true }, // like TNT
+  decoy:  { density: 0.0008, health: 15, fill: '#d9b98c', edge: '#9a7a50', points: 3000 },           // cardboard boss
+  yarnball: { density: 0.006, fill: '#7fb3e6', edge: '#4a7fb3', points: 0 },                         // rolling boulder (unbreakable)
+  shelf:  { fill: '#b07d4f', edge: '#7a4f2a', points: 0 },                                           // fixed to the wall
+  ramp:   { fill: '#e2c69c', edge: '#a8875a', points: 0 },                                           // fixed cardboard slide
 };
 
 const CATS = {
@@ -82,6 +89,15 @@ function hut(lv, cx, base, w, h, postMat, beamMat) {
 }
 function coon(lv, x, base, boss) { const r = boss ? 60 : 36; lv.raccoons.push({ x, y: base - r - 1, r, boss: !!boss }); }
 function loot(lv, x, base, kind) { lv.loot.push({ x, y: base - 14, kind }); }
+// fixed pieces that never move or break: a wall shelf (centre x, top y) and a slide given by its corner points
+function shelf(lv, x, top, w) { lv.blocks.push({ mat: 'shelf', x, y: top + 9, w, h: 18, fixed: true }); return top; }
+function ramp(lv, pts) { lv.blocks.push({ mat: 'ramp', x: 0, y: 0, pts, fixed: true }); }
+function yarnBall(lv, x, base, r) { lv.blocks.push({ mat: 'yarnball', x, y: base - r, r, ball: true }); }
+function catnip(lv, x, base) { block(lv, 'catnip', x, base - 22, 44, 44); }
+function book(lv, x, h) { block(lv, 'book', x, GROUND - h / 2, 22, h); }
+function decoy(lv, x) { block(lv, 'decoy', x, GROUND - 70, 92, 140); }
+// a raccoon on a plank held up by party balloons; it hovers around y until a balloon pops
+function floatie(lv, x, y) { lv.floats.push({ x, y }); }
 
 // Every level gets each cat exactly once.
 const LEVELS = [
@@ -126,6 +142,36 @@ const LEVELS = [
     loot(lv, 1120, a, 'fish');
     hut(lv, 950, GROUND, 110, 80, 'glass', 'wood'); loot(lv, 950, GROUND, 'yarn');
   } },
+  // Levels 7-10 borrow classic Angry Birds set pieces: chain-reaction dominoes, rolling boulders,
+  // TNT, balloons (Danger Above) and the cardboard King Pig decoy (Mighty Hoax).
+  { name: 'Bookshelf Dominoes', cats: ['cleo', 'baby', 'cece'], build(lv) {
+    for (let i = 0; i < 9; i++) book(lv, 820 + i * 38, 112 + (i % 3) * 8);   // knock the first one over...
+    const t = hut(lv, 1236, GROUND, 150, 100, 'glass', 'wood'); coon(lv, 1236, GROUND); loot(lv, 1236, t, 'fish');
+    const s1 = shelf(lv, 1050, 560, 230); coon(lv, 1000, s1); coon(lv, 1100, s1);
+    const s2 = shelf(lv, 1360, 500, 170); coon(lv, 1335, s2); loot(lv, 1410, s2, 'yarn');
+  } },
+  { name: 'Yarn Ball Avalanche', cats: ['baby', 'cece', 'cleo'], build(lv) {
+    ramp(lv, [[880, GROUND], [880, 600], [1140, GROUND]]);
+    const top = shelf(lv, 852, 584, 84); yarnBall(lv, 856, top, 44);           // nudge it down the slide
+    hut(lv, 1250, GROUND, 140, 100, 'glass', 'wood'); coon(lv, 1250, GROUND);
+    const t1 = hut(lv, 1390, GROUND, 140, 100, 'wood', 'glass'); coon(lv, 1390, GROUND);
+    const t2 = hut(lv, 1390, t1, 120, 90, 'glass', 'wood'); coon(lv, 1390, t1);
+    yarnBall(lv, 1390, t2, 36);
+  } },
+  { name: 'Catnip Kaboom', cats: ['cece', 'baby', 'cleo'], build(lv) {
+    const s1 = hut(lv, 1050, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1050, GROUND);
+    const w = hut(lv, 1050, s1, 120, 90, 'wood', 'wood'); coon(lv, 1050, s1); catnip(lv, 1050, w);
+    const s2 = hut(lv, 1330, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1330, GROUND);
+    coon(lv, 1300, s2); catnip(lv, 1385, s2);
+    catnip(lv, 930, GROUND); catnip(lv, 1190, GROUND); catnip(lv, 1450, GROUND);
+  } },
+  { name: 'Balloon Getaway', cats: ['cleo', 'baby', 'cece'], build(lv) {
+    floatie(lv, 1000, 570); floatie(lv, 1250, 505);
+    decoy(lv, 1180);                                                        // the boss? not quite...
+    block(lv, 'glass', 1325, GROUND - 60, 20, 120);
+    hut(lv, 1440, GROUND, 170, 150, 'stone', 'stone'); coon(lv, 1440, GROUND, true);
+    loot(lv, 1400, GROUND, 'fish');
+  } },
 ];
 
 // ---------------------------------------------------------------- saved progress
@@ -144,7 +190,7 @@ const sfx = {
     if (!this.ac) {
       try {
         this.ac = new (window.AudioContext || window.webkitAudioContext)();
-        const len = this.ac.sampleRate * 0.3;
+        const len = this.ac.sampleRate * 1.0;
         this.noise = this.ac.createBuffer(1, len, this.ac.sampleRate);
         const d = this.noise.getChannelData(0);
         for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
@@ -184,6 +230,45 @@ const sfx = {
     const t = this.ac.currentTime, s = this.ac.createBufferSource(), f = this.ac.createBiquadFilter();
     s.buffer = this.noise; f.type = 'lowpass'; f.frequency.value = 500;
     s.connect(f); f.connect(this.env(t, 0.18, 0.05 + 0.25 * v)); s.start(t); s.stop(t + 0.25);
+  },
+  // ---- crash and crumble sounds, made from filtered noise (no files) ----
+  // one burst of noise through a filter; start at a random spot in the buffer so repeats differ
+  burst(delay, dur, type, freq, q, vol) {
+    const t = this.ac.currentTime + delay, s = this.ac.createBufferSource(), f = this.ac.createBiquadFilter();
+    s.buffer = this.noise; f.type = type; f.frequency.value = freq; f.Q.value = q;
+    s.connect(f); f.connect(this.env(t, dur, vol));
+    s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+  },
+  lastBreak: 0,
+  // something just broke: the sound depends on what it was made of
+  crumble(mat) {
+    if (!this.ok()) return;
+    const now = this.ac.currentTime;
+    if (now - this.lastBreak < 0.035) return;          // a collapsing tower stays a crash, not a wall of noise
+    this.lastBreak = now;
+    const r = Math.random;
+    if (mat === 'glass') {
+      this.burst(0, 0.28, 'highpass', 2600, 0.7, 0.16);                       // shatter
+      for (let i = 0; i < 6; i++) this.tone('sine', 2400 + r() * 3200, 2200 + r() * 2600, 0.06 + r() * 0.14, 0.05, r() * 0.25);   // tinkling shards
+    } else if (mat === 'stone') {
+      this.burst(0, 0.5, 'lowpass', 380, 0.8, 0.34);                          // heavy crumble
+      this.tone('sine', 110, 45, 0.25, 0.22);
+      for (let i = 0; i < 7; i++) this.burst(0.04 + r() * 0.38, 0.05, 'bandpass', 700 + r() * 900, 3, 0.1);   // gravel
+    } else if (mat === 'book' || mat === 'decoy') {
+      this.burst(0, 0.13, 'bandpass', 1500, 1.2, 0.18);                       // papery thwap
+      this.tone('sine', 180, 90, 0.1, 0.12);
+    } else {                                                                  // wood
+      this.burst(0, 0.16, 'bandpass', 950, 2.2, 0.24);                        // crack
+      this.tone('triangle', 140, 60, 0.14, 0.18);                             // woody thump
+      for (let i = 0; i < 4; i++) this.burst(0.03 + r() * 0.14, 0.025, 'highpass', 2400, 0.8, 0.12);   // splinters
+    }
+  },
+  // a solid hit that didn't break anything
+  knock(mat, v) {
+    if (!this.ok()) return;
+    if (mat === 'glass') this.tone('sine', 1900 + Math.random() * 900, 1700, 0.09, 0.04 + 0.08 * v);
+    else if (mat === 'stone') { this.burst(0, 0.12, 'lowpass', 300, 0.8, 0.08 + 0.2 * v); this.tone('sine', 90, 55, 0.12, 0.1 * v); }
+    else this.burst(0, 0.09, 'bandpass', 520 + Math.random() * 200, 2.5, 0.06 + 0.2 * v);
   },
   pop() { this.tone('sine', 260, 900, 0.16, 0.2); },
   zoom() { this.tone('square', 300, 1300, 0.25, 0.05); },
@@ -336,11 +421,40 @@ function newEngine() {
 
 function makeBlock(b) {
   const m = MATS[b.mat];
-  const body = Bodies.rectangle(b.x, b.y, b.w, b.h, {
+  if (b.pts) {
+    // fixed slide: build from its corner points (fromVertices recentres on the centroid)
+    const cx = b.pts.reduce((s, p) => s + p[0], 0) / b.pts.length, cy = b.pts.reduce((s, p) => s + p[1], 0) / b.pts.length;
+    const body = Bodies.fromVertices(cx, cy, [b.pts.map(([x, y]) => ({ x, y }))], { isStatic: true, friction: 0.5, label: 'block' });
+    body.game = { kind: 'block', mat: b.mat, poly: true, seed: Math.random() * 1000 };
+    return body;
+  }
+  if (b.ball) {
+    const body = Bodies.circle(b.x, b.y, b.r, { density: m.density, friction: 0.5, frictionStatic: 0.8, restitution: 0.1, label: 'block' });
+    body.game = { kind: 'block', mat: b.mat, ball: true, r: b.r, seed: Math.random() * 1000 };
+    return body;
+  }
+  const body = Bodies.rectangle(b.x, b.y, b.w, b.h, b.fixed ? { isStatic: true, friction: 0.8, label: 'block' } : {
     density: m.density, friction: 0.8, frictionStatic: 1.2, restitution: 0.05, label: 'block' });
-  const hp = m.health * Math.max(0.6, Math.min(2.5, (b.w * b.h) / 2000));
-  body.game = { kind: 'block', mat: b.mat, w: b.w, h: b.h, hp, maxHp: hp, seed: Math.random() * 1000 };
+  const hp = b.fixed ? undefined : m.health * Math.max(0.6, Math.min(2.5, (b.w * b.h) / 2000));
+  body.game = { kind: 'block', mat: b.mat, w: b.w, h: b.h, hp, maxHp: hp, seed: Math.random() * 1000, fixed: b.fixed };
   return body;
+}
+// party-balloon platform: a plank, a raccoon sitting on it, three balloons on strings
+let floats = [];
+function makeFloat(f) {
+  const plank = makeBlock({ mat: 'wood', x: f.x, y: f.y, w: 150, h: 18 });
+  plank.frictionAir = 0.03;
+  const c = makeCoon({ x: f.x, y: f.y - 9 - 37, r: 36 });
+  const group = { plank, coon: c, balloons: [], y: f.y };
+  const colors = ['#ff6f91', '#ffc75f', '#6fc3ff'];
+  [-58, 0, 58].forEach((off, i) => {
+    const b = Bodies.circle(f.x + off * 1.25, f.y - 125 - (i === 1 ? 14 : 0), 24, { density: 0.0004, frictionAir: 0.06, restitution: 0.4, label: 'balloon' });
+    b.game = { kind: 'balloon', hp: 4, maxHp: 4, color: colors[i] };
+    b.game.rope = Constraint.create({ bodyA: b, bodyB: plank, pointB: { x: off, y: -9 }, length: 118 + (i === 1 ? 14 : 0), stiffness: 0.06, damping: 0.08 });
+    group.balloons.push(b);
+  });
+  group.weight = (plank.mass + c.mass + group.balloons.reduce((s, b) => s + b.mass, 0)) * 0.001;
+  return group;
 }
 function makeCoon(c) {
   const body = Bodies.circle(c.x, c.y, c.r, { density: 0.0025, friction: 0.7, restitution: 0.15, label: 'coon' });
@@ -367,14 +481,17 @@ function makeCat(type, x, y, r) {
 function loadLevel(i) {
   levelIdx = i;
   newEngine();
-  const lv = { blocks: [], raccoons: [], loot: [] };
+  const lv = { blocks: [], raccoons: [], loot: [], floats: [] };
   LEVELS[i].build(lv);
-  for (const list of [lv.blocks, lv.raccoons, lv.loot]) for (const o of list) o.x += FORT_X;
+  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
   Composite.add(engine.world, Bodies.rectangle(WORLD_W / 2, GROUND + 60, WORLD_W * 3, 120, { isStatic: true, friction: 0.9, label: 'ground' }));
   for (const b of lv.blocks) Composite.add(engine.world, makeBlock(b));
   for (const c of lv.raccoons) Composite.add(engine.world, makeCoon(c));
   for (const l of lv.loot) Composite.add(engine.world, makeLoot(l));
-  fortCenter = lv.raccoons.reduce((s, c) => s + c.x, 0) / lv.raccoons.length;
+  floats = lv.floats.map(makeFloat);
+  for (const f of floats) Composite.add(engine.world, [f.plank, f.coon, ...f.balloons, ...f.balloons.map(b => b.game.rope)]);
+  const xs = [...lv.raccoons, ...lv.floats].map(c => c.x);
+  fortCenter = xs.reduce((s, x) => s + x, 0) / xs.length;
   queue = LEVELS[i].cats.slice();
   current = queue.shift();
   phase = 'aim'; dragging = false; pull = { x: 0, y: 0 };
@@ -416,7 +533,12 @@ function onCollide(ev) {
     const rel = Vector.magnitude(Vector.sub(a.velocity, b.velocity));
     if (rel < 2) continue;
     hurt(a, b, rel); hurt(b, a, rel);
-    if (rel > 4 && frame - lastThud > 4) { lastThud = frame; sfx.thud(Math.min(1, rel / 18)); }
+    if (rel > 4 && frame - lastThud > 4) {
+      lastThud = frame;
+      // knock in the material of whatever got hit (blocks first, then the floor's dull thud)
+      const hit = ga && ga.kind === 'block' ? ga : gb && gb.kind === 'block' ? gb : null;
+      if (hit && !hit.dead) sfx.knock(hit.mat, Math.min(1, rel / 18)); else sfx.thud(Math.min(1, rel / 18));
+    }
   }
 }
 
@@ -510,6 +632,28 @@ function usePower() {
   }
 }
 
+// Push and damage everything within R of a point (catnip crates; chain reactions happen through kill()).
+function blast(center, R, push, dmg) {
+  for (const b of bodies()) {
+    if (b.isStatic || !b.game || b.game.kind === 'cat' || b.game.dead) continue;
+    const d = Vector.sub(b.position, center), dist = Vector.magnitude(d);
+    if (dist > R || dist < 0.01) continue;
+    const f = 1 - dist / R;
+    Sleeping.set(b, false);
+    Body.setVelocity(b, Vector.add(b.velocity, Vector.mult(Vector.normalise(d), 2 + push * f)));
+    Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.4 * f);
+    if (b.game.hp !== undefined) { b.game.hp -= dmg * f; if (b.game.hp <= 0) kill(b); }
+  }
+}
+function catnipBoom(pos) {
+  blast(pos, 230, 14, 80);
+  particles.push({ type: 'ring', x: pos.x, y: pos.y, vx: 0, vy: 0, s: 230, life: 22, max: 22 });
+  for (let i = 0; i < 18; i++) particles.push({ type: 'puff', x: pos.x + rand(-20, 20), y: pos.y + rand(-20, 20),
+    vx: rand(-4, 4), vy: rand(-5, 1), s: rand(14, 30), life: 45, max: 45, color: i % 3 ? '#9be08a' : '#e9ffd9' });
+  sparkle(pos, 8);
+  sfx.thud(1); sfx.tone('sawtooth', 160, 40, 0.4, 0.18);
+}
+
 // ---------------------------------------------------------------- simulation step
 
 function bodies() { return Composite.allBodies(engine.world); }
@@ -539,6 +683,16 @@ function step() {
   popups = popups.filter(p => p.life > 0);
 
   if (!engine || state === 'menu' || state === 'levels') return;
+  // balloons: hover their platform near its height; once any balloon pops the rest can't hold it up
+  for (const f of floats) {
+    if (f.plank.game.dead) continue;
+    const alive = f.balloons.filter(b => !b.game.dead);
+    if (!alive.length) continue;
+    if (alive.length < f.balloons.length) f.broken = true;
+    const k = f.broken ? 0.35 : Math.max(0.2, Math.min(1.8, 1 + (f.plank.position.y - f.y) / 50 + f.plank.velocity.y * 0.3));
+    for (const b of alive) Body.applyForce(b, b.position, { x: 0, y: -f.weight / f.balloons.length * k });
+    if (!f.broken) Body.setAngularVelocity(f.plank, f.plank.angularVelocity * 0.8 - f.plank.angle * 0.06);   // keep the plank level
+  }
   Engine.update(engine, STEP);
   if (settle > 0) settle--;
   if (snapTimer > 0) snapTimer--;
@@ -578,10 +732,14 @@ function step() {
   }
 
   if (toRemove.length) {
+    // (explosions can add more to toRemove while this runs; for...of picks those up too)
     for (const b of toRemove) {
       Composite.remove(engine.world, b);
       const g = b.game;
-      if (g.kind === 'block') { addScore(MATS[g.mat].points, b.position); debris(b); }
+      if (g.kind === 'block' && MATS[g.mat].explodes) { addScore(MATS[g.mat].points, b.position, 'KABOOM!'); catnipBoom(b.position); }
+      else if (g.kind === 'block' && g.mat === 'decoy') { addScore(3000, b.position, 'It was a cardboard decoy!'); debris(b); sfx.crumble('decoy'); }
+      else if (g.kind === 'balloon') { Composite.remove(engine.world, g.rope); addScore(200, b.position, 'POP!'); poof(b.position, 5, 0.5); sfx.tone('square', 900, 200, 0.08, 0.12); }
+      else if (g.kind === 'block') { addScore(MATS[g.mat].points, b.position); debris(b); sfx.crumble(g.mat); }
       else if (g.kind === 'coon') { addScore(g.boss ? 20000 : 5000, b.position); poof(b.position, g.boss ? 18 : 10, g.boss ? 1.6 : 1); sparkle(b.position, 6); sfx.pop(); }
       else if (g.kind === 'loot' && g.collected) { addScore(1000, b.position, g.type === 'fish' ? 'Treat saved! +1000' : 'Yarn saved! +1000'); sparkle(b.position, 10); sfx.ding(); }
     }
@@ -1110,10 +1268,57 @@ function drawCoon(x, y, r, ang, g) {
 
 function drawBlock(b) {
   const g = b.game, m = MATS[g.mat], w = g.w, h = g.h;
+  if (g.poly) {
+    // cardboard slide
+    ctx.beginPath(); b.vertices.forEach((v, i) => i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y)); ctx.closePath();
+    ctx.fillStyle = m.fill; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = m.edge; ctx.stroke();
+    ctx.save(); ctx.clip(); ctx.strokeStyle = 'rgba(160,120,70,0.35)'; ctx.lineWidth = 3;
+    for (let k = 0; k < 12; k++) { ctx.beginPath(); ctx.moveTo(b.bounds.min.x + k * 30, b.bounds.max.y); ctx.lineTo(b.bounds.min.x + k * 30 - 200, b.bounds.min.y); ctx.stroke(); }
+    ctx.restore();
+    return;
+  }
   ctx.save();
   ctx.translate(b.position.x, b.position.y); ctx.rotate(b.angle);
-  ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w, h, 3); ctx.fill();
+  if (g.ball) {
+    // giant ball of yarn: wraps turn with it as it rolls
+    const r = g.r;
+    ctx.fillStyle = m.fill; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.strokeStyle = m.edge; ctx.lineWidth = r * 0.07;
+    for (const [a, sx] of [[0.3, 1], [1.2, 0.8], [2.2, 0.9], [-0.7, 0.6]]) { ctx.save(); ctx.rotate(a); ctx.beginPath(); ctx.ellipse(0, 0, r * sx, r * 0.35, 0, 0, 7); ctx.stroke(); ctx.restore(); }
+    ctx.restore();
+    ctx.lineWidth = 3; ctx.strokeStyle = m.edge; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r * 0.7, r * 0.7); ctx.quadraticCurveTo(r * 1.3, r * 0.8, r * 1.1, r * 1.3); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  if (g.mat === 'decoy') {
+    // cardboard cut-out of the boss on a little easel stand
+    ctx.fillStyle = '#9a7a50'; ctx.fillRect(-4, 10, 8, h / 2 - 10); ctx.fillRect(-24, h / 2 - 6, 48, 6);
+    ctx.fillStyle = m.fill; ctx.beginPath(); ctx.arc(0, -12, 52, 0, 7); ctx.fill();
+    ctx.strokeStyle = m.edge; ctx.lineWidth = 3; ctx.stroke();
+    drawCoon(0, -12, 46, 0, { hp: 1, maxHp: 1, blink: 0, boss: true });
+    ctx.fillStyle = 'rgba(217,185,140,0.35)'; ctx.beginPath(); ctx.arc(0, -12, 52, 0, 7); ctx.fill();   // printed-on-card look
+    ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(28, -64, 26, 10);                              // bit of tape
+    ctx.restore();
+    return;
+  }
+  ctx.fillStyle = g.mat === 'book' ? ['#e98f8f', '#8ec9e6', '#f6d27a', '#9fd3a8', '#c7a6e6'][Math.floor(g.seed) % 5] : m.fill;
+  rr(-w / 2, -h / 2, w, h, 3); ctx.fill();
   ctx.lineWidth = 2.5; ctx.strokeStyle = m.edge; ctx.stroke();
+  if (g.mat === 'book') {
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    for (const y of [-h * 0.32, h * 0.28]) ctx.fillRect(-w / 2 + 3, y, w - 6, 5);
+  } else if (g.mat === 'catnip') {
+    ctx.strokeStyle = 'rgba(40,90,40,0.4)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.moveTo(w / 2, -h / 2); ctx.lineTo(-w / 2, h / 2); ctx.stroke();
+    ctx.fillStyle = '#2f7a2c'; ctx.beginPath(); ctx.ellipse(0, -3, 7, 12, 0.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2f7a2c'; ctx.beginPath(); ctx.moveTo(-2, 6); ctx.lineTo(-6, 14); ctx.stroke();
+    text('CATNIP', 0, h / 2 - 8, 9, '#ffffff');
+  } else if (g.mat === 'shelf') {
+    ctx.fillStyle = m.edge;
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * (w / 2 - 14), h / 2); ctx.lineTo(s * (w / 2 - 14), h / 2 + 34); ctx.lineTo(s * (w / 2 - 44), h / 2); ctx.closePath(); ctx.fill(); }
+  }
   if (g.mat === 'wood') {
     ctx.strokeStyle = 'rgba(110,60,25,0.45)'; ctx.lineWidth = 1.5;
     for (const k of [-0.22, 0.18]) {
@@ -1224,6 +1429,14 @@ function drawTrajectory() {
   }
 }
 
+function drawBalloon(b) {
+  const x = b.position.x, y = b.position.y;
+  ctx.fillStyle = b.game.color;
+  ctx.beginPath(); ctx.ellipse(x, y, 22, 27, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x - 5, y + 30); ctx.lineTo(x + 5, y + 30); ctx.lineTo(x, y + 25); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.ellipse(x - 8, y - 10, 5, 9, -0.4, 0, 7); ctx.fill();
+}
+
 function drawWorld() {
   // while it's about to snap, the whole slingshot shakes harder and harder
   const creak = snapStrain / SNAP_DELAY;
@@ -1249,11 +1462,19 @@ function drawWorld() {
   if (snapTimer > 0 || bandSnapped) snappedBands();
 
   const list = bodies().filter(b => b.game);
-  const order = { block: 0, loot: 1, coon: 2, cat: 3 };
+  const order = { block: 0, loot: 1, balloon: 2, coon: 3, cat: 4 };
+  // balloon strings, drawn behind everything on the platform
+  ctx.strokeStyle = 'rgba(80,80,90,0.7)'; ctx.lineWidth = 2;
+  for (const f of floats) for (const bl of f.balloons) {
+    if (bl.game.dead) continue;
+    const r = bl.game.rope, pb = Vector.add(f.plank.position, Vector.rotate(r.pointB, f.plank.angle));
+    ctx.beginPath(); ctx.moveTo(bl.position.x, bl.position.y + 24); ctx.quadraticCurveTo((bl.position.x + pb.x) / 2 + 6, (bl.position.y + pb.y) / 2, pb.x, pb.y); ctx.stroke();
+  }
   list.sort((a, b) => order[a.game.kind] - order[b.game.kind]);
   for (const b of list) {
     const g = b.game;
     if (g.kind === 'block') drawBlock(b);
+    else if (g.kind === 'balloon') drawBalloon(b);
     else if (g.kind === 'loot') drawLoot(b);
     else if (g.kind === 'coon') drawCoon(b.position.x, b.position.y, g.r, b.angle, g);
     else if (g.kind === 'cat') {
@@ -1511,15 +1732,15 @@ function drawLevels() {
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
   LEVELS.forEach((lv, i) => {
-    const col = i % 3, row = Math.floor(i / 3);
-    const x = 520 + col * 280, y = 330 + row * 250, w = 230, h = 200;
+    const col = i % 5, row = Math.floor(i / 5);
+    const x = W / 2 + (col - 2) * 240, y = 335 + row * 260, w = 215, h = 210;
     const open = unlocked(i);
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(x - w / 2, y - h / 2 + 8, w, h, 24); ctx.fill();
     ctx.fillStyle = open ? '#fff6e6' : '#9b93ad'; rr(x - w / 2, y - h / 2, w, h, 24); ctx.fill();
     ctx.lineWidth = 5; ctx.strokeStyle = open ? '#e8b06a' : '#7b7390'; ctx.stroke();
     if (open) {
       text(String(i + 1), x, y - 30, 70, '#ff7a59', { stroke: '#5b3a1e', strokeW: 8 });
-      text(lv.name, x, y + 30, 20, '#5b3a1e', { weight: 500 });
+      text(lv.name, x, y + 30, 19, '#5b3a1e', { weight: 500 });
       const s = bestStars[i] || 0;
       for (let k = 0; k < 3; k++) starShape(x + (k - 1) * 38, y + 68, 15, k < s ? '#ffd23f' : '#e4dccd', k < s ? '#b8860b' : '#cfc4b1');
       uiButtons.push({ x: x + uiShift, y, w, h, action: () => loadLevel(i) });

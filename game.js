@@ -124,6 +124,7 @@ const sfx = {
       } catch (e) { this.ac = null; }
     }
     if (this.ac && this.ac.state === 'suspended') this.ac.resume();
+    this.loadSample('win', 'jingle-win.ogg');
   },
   ok() { return this.on && this.ac; },
   env(t, dur, vol) {
@@ -160,7 +161,25 @@ const sfx = {
   snap() { this.tone('square', 1800, 120, 0.18, 0.12); this.thud(0.6); },
   shake() { for (let i = 0; i < 6; i++) this.tone('triangle', i % 2 ? 260 : 340, i % 2 ? 300 : 220, 0.07, 0.13, i * 0.07); },
   ding() { this.tone('triangle', 1200, 1800, 0.15, 0.12); },
-  win() { [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13)); },
+  // recorded jingles (loaded after the first tap); the synth versions are the fallback
+  samples: {},
+  loadSample(name, url) {
+    if (!this.ac || this.samples[name] !== undefined) return;
+    this.samples[name] = null;
+    fetch(url).then(r => r.arrayBuffer()).then(b => new Promise((res, rej) => this.ac.decodeAudioData(b, res, rej)))
+      .then(buf => { this.samples[name] = buf; }).catch(() => { /* keep the synth fallback */ });
+  },
+  playSample(name, vol) {
+    const buf = this.samples[name];
+    if (!this.ok() || !buf) return false;
+    const src = this.ac.createBufferSource(), g = this.ac.createGain();
+    src.buffer = buf; g.gain.value = vol; src.connect(g); g.connect(this.ac.destination); src.start();
+    return true;
+  },
+  win() {
+    if (this.playSample('win', 0.8)) return;
+    [523, 659, 784, 1047].forEach((f, i) => this.tone('triangle', f, f, 0.22, 0.15, i * 0.13));
+  },
   lose() { [392, 330, 262].forEach((f, i) => this.tone('sawtooth', f, f * 0.97, 0.3, 0.06, i * 0.22)); },
 };
 
@@ -503,7 +522,7 @@ function finishWin() {
   bestStars[levelIdx] = Math.max(bestStars[levelIdx] || 0, stars);
   saveStars();
   state = 'won';
-  sfx.win(); music.duck(2.5);
+  sfx.win(); music.duck(3.2);
 }
 
 // ---------------------------------------------------------------- camera

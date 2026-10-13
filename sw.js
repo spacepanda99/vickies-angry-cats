@@ -1,6 +1,6 @@
 // Offline support once installed: serve the game files from cache, refresh them in the background.
-const CACHE = 'angry-cats-v9';
-const FILES = ['./', './index.html', './backdrop.js', './game.js', './matter.min.js', './manifest.json', './icon-192.png', './icon-512.png', './music-menu.ogg', './music-game.ogg'];
+const CACHE = 'angry-cats-v10';
+const FILES = ['./', './index.html', './backdrop.js', './game.js', './matter.min.js', './manifest.json', './icon-192.png', './icon-512.png', './music-menu.ogg', './music-game.ogg', './jingle-win.ogg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

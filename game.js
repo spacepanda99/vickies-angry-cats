@@ -45,6 +45,17 @@ const CATS = {
           power: 'pounce', hint: 'Tap to pounce!' },
 };
 
+// Each cat's name lettering (home screen and the 'is up!' banner).
+const NAME_STYLE = {
+  baby: { font: 'Bangers, Impact, sans-serif', weight: 400, fill: '#e9e9ee', stroke: '#4a4856' },
+  cece: { font: "Chewy, 'Comic Sans MS', cursive", weight: 400, fill: '#fff3e0', stroke: '#5a4030' },
+  cleo: { font: "'Dancing Script', 'Brush Script MT', cursive", weight: 700, fill: '#ffe6c4', stroke: '#9a5a2a' },
+};
+function nameText(type, x, y, size, align) {
+  const st = NAME_STYLE[type];
+  text(CATS[type].name, x, y, size, st.fill, { font: st.font, weight: st.weight, stroke: st.stroke, strokeW: size * 0.15, align });
+}
+
 // Level building helpers. A "hut" is two posts and a beam; huts stack.
 function block(lv, mat, x, y, w, h) { lv.blocks.push({ mat, x, y, w, h }); }
 function hut(lv, cx, base, w, h, postMat, beamMat) {
@@ -258,6 +269,9 @@ let settle = 0, score = 0, stars = 0, bonus = 0;
 let toRemove = [], particles = [], popups = [], uiButtons = [], uiShift = 0;
 let frame = 0, lastThud = 0, launchedOnce = false, snapTimer = 0, bandSnapped = false;
 let panning = null, panIdle = 999, introTimer = 0, fortCenter = 1700;
+// 'Baby is up!' ribbon: slides in from the left, holds, whooshes off right (t counts frames; negative = waiting)
+let upBanner = null;
+const BANNER_IN = 12, BANNER_HOLD = 52, BANNER_OUT = 12, BANNER_LEN = BANNER_IN + BANNER_HOLD + BANNER_OUT;
 
 function newEngine() {
   engine = Engine.create({ enableSleeping: true, positionIterations: 10, velocityIterations: 8 });
@@ -314,6 +328,7 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
+  upBanner = { type: current, t: -95 };   // after the camera glides back from the fort
   cam.x = clampCamX(fortCenter - viewW / 2); cam.y = CAM_TOP;
   state = 'play';
 }
@@ -452,6 +467,10 @@ function step() {
   }
   particles = particles.filter(p => p.life > 0);
   for (const p of popups) { p.life--; p.y -= 0.8; }
+  if (upBanner) {
+    if (upBanner.t === 0) sfx.tone('sine', 260, 1100, 0.18, 0.06);   // whoosh
+    if (++upBanner.t > BANNER_LEN) upBanner = null;
+  }
   popups = popups.filter(p => p.life > 0);
 
   if (!engine || state === 'menu' || state === 'levels') return;
@@ -510,7 +529,7 @@ function updatePhase() {
     if (allDone) {
       for (const c of flying) { if (c.position.y < H + 200) poof(c.position, 6, c.game.r / 26); Composite.remove(engine.world, c); }
       flying = [];
-      if (queue.length) { current = queue.shift(); phase = 'aim'; panIdle = 999; }
+      if (queue.length) { current = queue.shift(); phase = 'aim'; panIdle = 999; upBanner = { type: current, t: 0 }; }
       else { phase = 'out'; outTimer = 150; }
     }
   } else if (phase === 'out') {
@@ -1201,8 +1220,9 @@ function drawHUD() {
   }
   let hint = null;
   if (state === 'play' && phase === 'aim' && current && !dragging) {
-    hint = !launchedOnce ? 'Pull the cat back and let go!'
-      : current === 'cece' ? 'CeCe is up! Careful, she\'s heavy...' : `${CATS[current].name} is up!`;
+    // the ribbon announces whose turn it is; the hint only adds advice
+    hint = !launchedOnce ? 'Pull the cat back and let go!' : current === 'cece' ? 'Careful, she\'s heavy...' : null;
+    if (upBanner && upBanner.t >= 0 && launchedOnce) hint = null;
     if (panIdle < 100 || panning) hint = 'Looking around...';
   } else if (state === 'play' && phase === 'aim' && dragging && current === 'cece') {
     const d = Math.hypot(pull.x, pull.y);
@@ -1217,6 +1237,38 @@ function drawHUD() {
     ctx.lineWidth = 5; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
     text(hint, UW / 2, 174, 54, '#ffe14d', { stroke: '#120a26', strokeW: 10 });
   }
+  drawUpBanner();
+}
+
+function drawUpBanner() {
+  if (!upBanner || upBanner.t < 0 || state !== 'play') return;
+  const t = upBanner.t, type = upBanner.type, far = UW + 400;
+  let off;
+  if (t < BANNER_IN) off = -Math.pow(1 - t / BANNER_IN, 3) * far;                    // ease in from the left
+  else if (t < BANNER_IN + BANNER_HOLD) off = (t - BANNER_IN) * 0.4;                 // slow drift while it holds
+  else { const k = (t - BANNER_IN - BANNER_HOLD) / BANNER_OUT; off = BANNER_HOLD * 0.4 + k * k * k * far; }   // whoosh off right
+  const moving = t < BANNER_IN || t >= BANNER_IN + BANNER_HOLD;
+  ctx.save();
+  ctx.translate(off, 0);
+  // slanted ribbon with gold edges
+  ctx.fillStyle = 'rgba(24,14,48,0.86)';
+  ctx.beginPath(); ctx.moveTo(-60, 385); ctx.lineTo(UW + 60, 360); ctx.lineTo(UW + 60, 540); ctx.lineTo(-60, 565); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#ffd23f'; ctx.lineWidth = 7;
+  ctx.beginPath(); ctx.moveTo(-60, 385); ctx.lineTo(UW + 60, 360); ctx.moveTo(-60, 565); ctx.lineTo(UW + 60, 540); ctx.stroke();
+  if (moving) {
+    // speed lines trailing behind
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 6; ctx.lineCap = 'round';
+    for (const [y, len] of [[420, 260], [465, 380], [510, 220]]) { ctx.beginPath(); ctx.moveTo(UW / 2 - 330 - len, y); ctx.lineTo(UW / 2 - 330, y); ctx.stroke(); }
+    ctx.lineCap = 'butt';
+  }
+  const r = type === 'cece' ? 92 : type === 'cleo' ? 74 : 68;
+  drawCat(UW / 2 - 210, 462 + Math.sin(t * 0.3) * 3, r, Math.sin(t * 0.25) * 0.08, type);
+  const x0 = UW / 2 - 85, st = NAME_STYLE[type];
+  nameText(type, x0, 450, 118, 'left');
+  ctx.font = `${st.weight} 118px ${st.font}`;
+  const w = ctx.measureText(CATS[type].name).width;
+  text('is up!', x0 + w + 28, 470, 62, '#ffe14d', { align: 'left', stroke: '#120a26', strokeW: 10 });
+  ctx.restore();
 }
 
 function panel(x, y, w, h) {
@@ -1280,9 +1332,9 @@ function drawMenu() {
   drawCat(800, 530 + bob(1), 132, 0, 'cece');
   drawCat(538, 568 + bob(0), 84, -0.08, 'baby');
   drawCat(1065, 565 + bob(2), 92, 0.06, 'cleo');
-  text('Baby', 538, 690, 66, '#ffd9bf', { font: "Bangers, Impact, sans-serif", weight: 400, stroke: '#4a4856', strokeW: 10 });
-  text('CeCe', 800, 712, 74, '#fff3e0', { font: "Chewy, 'Comic Sans MS', cursive", weight: 400, stroke: '#5a4030', strokeW: 11 });
-  text('Cleo', 1065, 690, 78, '#ffe6c4', { font: "'Dancing Script', 'Brush Script MT', cursive", weight: 700, stroke: '#9a5a2a', strokeW: 10 });
+  nameText('baby', 538, 690, 66);
+  nameText('cece', 800, 712, 74);
+  nameText('cleo', 1065, 690, 78);
   button('PLAY', W / 2, 818, 280, 84, '#4caf6a', () => { state = 'levels'; });
   fullscreenButton(UW - uiShift - 60, 60);
   iconButton('music', UW - uiShift - 145, 60, () => music.toggle());

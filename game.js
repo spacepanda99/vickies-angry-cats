@@ -37,7 +37,7 @@ const CATS = {
           body: '#9a9ea6', dark: '#5f636b', belly: '#d9dbe0', eye: '#b8e04a',
           power: 'split', hint: 'Tap for ninja clones!' },
   // CeCe weighs a ton: she launches weak, lands short, then rolls like a bowling ball.
-  cece: { name: 'CeCe', r: 56, density: 0.00864, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
+  cece: { name: 'CeCe', r: 70, density: 0.00553, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
           body: '#959ca5', dark: '#5c626b', belly: '#f4f5f7', eye: '#e8b33a',
           power: 'shake', hint: 'Tap for the head shake!' },
   cleo: { name: 'Cleo', r: 34, density: 0.004, restitution: 0.3, friction: 0.5,
@@ -328,7 +328,7 @@ function usePower() {
   } else if (t.power === 'shake') {
     // CeCe's signature fast head shake: a blast of fur that shoves and dents everything nearby
     g.shake = 42;
-    const R = 230;
+    const R = 260;
     for (const b of bodies()) {
       if (b === c || b.isStatic || !b.game || b.game.kind === 'cat' || b.game.dead) continue;
       const d = Vector.sub(b.position, c.position), dist = Vector.magnitude(d);
@@ -1045,9 +1045,13 @@ function drawTrajectory() {
 function drawWorld() {
   drawSlingBack();
   // waiting cats sit in line behind the slingshot
+  // (spaced by size, so big CeCe doesn't overlap her neighbour)
+  let qx = SLING.x - 45;
   queue.forEach((type, i) => {
-    const r = CATS[type].r * 0.75, x = SLING.x - 80 - i * 75, bob = Math.sin(frame * 0.05 + i) * 2;
-    drawCat(x, GROUND - r + bob, r, 0, type, { calm: true });
+    const r = CATS[type].r * 0.75, bob = Math.sin(frame * 0.05 + i) * 2;
+    qx -= r * 1.15;
+    drawCat(qx, GROUND - r + bob, r, 0, type, { calm: true });
+    qx -= r * 1.15 + 6;
   });
 
   const loaded = phase === 'aim' && current;
@@ -1201,12 +1205,12 @@ function drawMenu() {
   text('ANGRY CATS', W / 2, 230, 130, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
   text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 325, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
-  drawCat(300, 540 + bob(0), 62, -0.1, 'baby');
-  drawCat(490, 525 + bob(1), 92, 0, 'cece');
-  drawCat(680, 540 + bob(2), 68, 0.08, 'cleo');
-  text('Baby', 300, 640, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
-  text('CeCe', 490, 655, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
-  text('Cleo', 680, 640, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
+  drawCat(250, 545 + bob(0), 62, -0.1, 'baby');
+  drawCat(495, 520 + bob(1), 120, 0, 'cece');
+  drawCat(745, 545 + bob(2), 68, 0.08, 'cleo');
+  text('Baby', 250, 640, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
+  text('CeCe', 495, 680, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
+  text('Cleo', 745, 640, 26, '#fff', { stroke: '#3a2160', strokeW: 6 });
   drawCoon(1130, 545 + bob(3), 78, Math.sin(frame * 0.03) * 0.1, { hp: 30, maxHp: 30, blink: 50 });
   drawCoon(1320, 565 + bob(4), 58, 0.1, { hp: 30, maxHp: 30, blink: 120 });
   ctx.save(); ctx.translate(1225, 640); ctx.rotate(-0.2); ctx.scale(1.5, 1.5);

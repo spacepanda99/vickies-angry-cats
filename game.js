@@ -807,6 +807,12 @@ function toggleFullscreen() {
     .catch(() => { /* not allowed here; the game still works */ });
 }
 function fullscreenButton(x, y) { if (canFullscreen) { iconButton('fullscreen', x, y, toggleFullscreen); uiButtons[uiButtons.length - 1].onLift = true; } }
+// a plain red 'Exit' button shown while in full screen
+function exitFullscreenButton(x, y, w = 170, h = 80) {
+  if (!canFullscreen || !isFullscreen()) return;
+  button('Exit', x, y, w, h, '#d0574f', toggleFullscreen);
+  uiButtons[uiButtons.length - 1].onLift = true;
+}
 // a big, can't-miss button with the words on it; once full screen, only the small exit icon remains
 function bigFullscreenButton(x, y, w, h) {
   if (!canFullscreen || isFullscreen()) return false;
@@ -1319,8 +1325,7 @@ function drawHUD() {
   if (state === 'play') {
     if (!bigFullscreenButton(UW - 545, 56, 260, 72) && canFullscreen) {
       // in full screen: a plain 'Exit' button to leave it
-      button('Exit', UW - 432, 56, 150, 72, '#d0574f', toggleFullscreen);
-      uiButtons[uiButtons.length - 1].onLift = true;
+      exitFullscreenButton(UW - 432, 56, 150, 72);
     }
     iconButton('music', UW - 315, 56, () => music.toggle());
     iconButton('sound', UW - 230, 56, () => { sfx.on = !sfx.on; saveAudio(); });
@@ -1495,16 +1500,16 @@ function drawMenu() {
   nameText('cece', 800, 712, 74);
   nameText('cleo', 1065, 690, 78);
   button('PLAY', W / 2, 818, 280, 84, '#4caf6a', () => { state = 'levels'; });
-  if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) fullscreenButton(UW - uiShift - 60, 60);
-  iconButton('music', UW - uiShift - (canFullscreen && !isFullscreen() ? 420 : 145), 60, () => music.toggle());
+  if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
+  iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
 }
 
 function drawLevels() {
   ctx.fillStyle = 'rgba(30,50,60,0.3)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
   text('Pick a level', W / 2, 120, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
   iconButton('back', 80 - uiShift + 20, 80, () => { state = 'menu'; });
-  if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) fullscreenButton(UW - uiShift - 60, 60);
-  iconButton('music', UW - uiShift - (canFullscreen && !isFullscreen() ? 420 : 145), 60, () => music.toggle());
+  if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
+  iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
   LEVELS.forEach((lv, i) => {
     const col = i % 3, row = Math.floor(i / 3);
     const x = 520 + col * 280, y = 330 + row * 250, w = 230, h = 200;

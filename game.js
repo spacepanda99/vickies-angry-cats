@@ -17,6 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
+const GAME_VERSION = 27;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -202,13 +203,24 @@ const sfx = {
     for (const n of catSoundFiles()) this.loadSample('cat:' + n, 'sounds/' + n + '.ogg');
   },
   ok() { return this.on && this.ac; },
-  env(t, dur, vol) {
+  env(t, dur, vol, dest, attack = 0.02) {
     const g = this.ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.02);
+    g.gain.exponentialRampToValueAtTime(vol, t + attack);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    g.connect(this.ac.destination);
+    g.connect(dest || this.ac.destination);
     return g;
+  },
+  // crashes get their own loud channel with a limiter, so they cut through the music without distorting
+  crashBus: null,
+  bus() {
+    if (!this.crashBus) {
+      const comp = this.ac.createDynamicsCompressor();
+      comp.threshold.value = -14; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.15;
+      this.crashBus = this.ac.createGain(); this.crashBus.gain.value = 3.2;
+      this.crashBus.connect(comp); comp.connect(this.ac.destination);
+    }
+    return this.crashBus;
   },
   tone(type, f0, f1, dur, vol, delay = 0) {
     if (!this.ok()) return;
@@ -231,13 +243,18 @@ const sfx = {
     s.buffer = this.noise; f.type = 'lowpass'; f.frequency.value = 500;
     s.connect(f); f.connect(this.env(t, 0.18, 0.05 + 0.25 * v)); s.start(t); s.stop(t + 0.25);
   },
-  // ---- crash and crumble sounds, made from filtered noise (no files) ----
-  // one burst of noise through a filter; start at a random spot in the buffer so repeats differ
+  // ---- crash and crumble sounds, made from filtered noise (no files), all through the loud crash bus ----
+  // one burst of noise through a filter; starts at a random spot in the buffer so repeats differ
   burst(delay, dur, type, freq, q, vol) {
     const t = this.ac.currentTime + delay, s = this.ac.createBufferSource(), f = this.ac.createBiquadFilter();
     s.buffer = this.noise; f.type = type; f.frequency.value = freq; f.Q.value = q;
-    s.connect(f); f.connect(this.env(t, dur, vol));
+    s.connect(f); f.connect(this.env(t, dur, vol, this.bus(), 0.003));
     s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+  },
+  ping(type, f0, f1, dur, vol, delay = 0) {
+    const t = this.ac.currentTime + delay, o = this.ac.createOscillator();
+    o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    o.connect(this.env(t, dur, vol, this.bus(), 0.003)); o.start(t); o.stop(t + dur + 0.05);
   },
   lastBreak: 0,
   // something just broke: the sound depends on what it was made of
@@ -248,27 +265,27 @@ const sfx = {
     this.lastBreak = now;
     const r = Math.random;
     if (mat === 'glass') {
-      this.burst(0, 0.28, 'highpass', 2600, 0.7, 0.16);                       // shatter
-      for (let i = 0; i < 6; i++) this.tone('sine', 2400 + r() * 3200, 2200 + r() * 2600, 0.06 + r() * 0.14, 0.05, r() * 0.25);   // tinkling shards
+      this.burst(0, 0.32, 'highpass', 2200, 0.5, 0.5);                              // shatter
+      for (let i = 0; i < 7; i++) this.ping('sine', 2400 + r() * 3200, 2200 + r() * 2600, 0.08 + r() * 0.16, 0.16, r() * 0.28);   // tinkling shards
     } else if (mat === 'stone') {
-      this.burst(0, 0.5, 'lowpass', 380, 0.8, 0.34);                          // heavy crumble
-      this.tone('sine', 110, 45, 0.25, 0.22);
-      for (let i = 0; i < 7; i++) this.burst(0.04 + r() * 0.38, 0.05, 'bandpass', 700 + r() * 900, 3, 0.1);   // gravel
+      this.burst(0, 0.55, 'lowpass', 520, 0.6, 0.9);                                // heavy crumble
+      this.ping('sine', 120, 45, 0.3, 0.5);
+      for (let i = 0; i < 8; i++) this.burst(0.04 + r() * 0.4, 0.06, 'bandpass', 700 + r() * 900, 1.5, 0.35);   // gravel
     } else if (mat === 'book' || mat === 'decoy') {
-      this.burst(0, 0.13, 'bandpass', 1500, 1.2, 0.18);                       // papery thwap
-      this.tone('sine', 180, 90, 0.1, 0.12);
-    } else {                                                                  // wood
-      this.burst(0, 0.16, 'bandpass', 950, 2.2, 0.24);                        // crack
-      this.tone('triangle', 140, 60, 0.14, 0.18);                             // woody thump
-      for (let i = 0; i < 4; i++) this.burst(0.03 + r() * 0.14, 0.025, 'highpass', 2400, 0.8, 0.12);   // splinters
+      this.burst(0, 0.15, 'bandpass', 1500, 0.7, 0.55);                             // papery thwap
+      this.ping('sine', 190, 90, 0.12, 0.35);
+    } else {                                                                        // wood
+      this.burst(0, 0.18, 'bandpass', 1100, 0.9, 0.75);                             // crack
+      this.ping('triangle', 150, 60, 0.16, 0.5);                                    // woody thump
+      for (let i = 0; i < 5; i++) this.burst(0.03 + r() * 0.16, 0.03, 'highpass', 2200, 0.6, 0.35);   // splinters
     }
   },
   // a solid hit that didn't break anything
   knock(mat, v) {
     if (!this.ok()) return;
-    if (mat === 'glass') this.tone('sine', 1900 + Math.random() * 900, 1700, 0.09, 0.04 + 0.08 * v);
-    else if (mat === 'stone') { this.burst(0, 0.12, 'lowpass', 300, 0.8, 0.08 + 0.2 * v); this.tone('sine', 90, 55, 0.12, 0.1 * v); }
-    else this.burst(0, 0.09, 'bandpass', 520 + Math.random() * 200, 2.5, 0.06 + 0.2 * v);
+    if (mat === 'glass') this.ping('sine', 1900 + Math.random() * 900, 1700, 0.1, 0.1 + 0.2 * v);
+    else if (mat === 'stone') { this.burst(0, 0.14, 'lowpass', 380, 0.6, 0.2 + 0.45 * v); this.ping('sine', 95, 55, 0.14, 0.25 * v); }
+    else this.burst(0, 0.1, 'bandpass', 560 + Math.random() * 200, 1.2, 0.15 + 0.45 * v);
   },
   pop() { this.tone('sine', 260, 900, 0.16, 0.2); },
   zoom() { this.tone('square', 300, 1300, 0.25, 0.05); },
@@ -966,16 +983,17 @@ function toggleFullscreen() {
 }
 function fullscreenButton(x, y) { if (canFullscreen) { iconButton('fullscreen', x, y, toggleFullscreen); uiButtons[uiButtons.length - 1].onLift = true; } }
 // a plain red 'Exit' button shown while in full screen
+// The Full screen / Exit buttons are a real HTML <button> laid over the canvas (#fsbtn), not canvas drawing:
+// Android Chrome only reliably allows full screen from a genuine button click. These just say where it goes.
+let fsSlot = null;
 function exitFullscreenButton(x, y, w = 170, h = 80) {
   if (!canFullscreen || !isFullscreen()) return;
-  button('Exit', x, y, w, h, '#d0574f', toggleFullscreen);
-  uiButtons[uiButtons.length - 1].onLift = true;
+  fsSlot = { x: x + uiShift, y, w, h, label: 'Exit', color: '#d0574f' };
 }
 // a big, can't-miss button with the words on it; once full screen, only the small exit icon remains
 function bigFullscreenButton(x, y, w, h) {
   if (!canFullscreen || isFullscreen()) return false;
-  button('Full screen', x, y, w, h, '#3d8bd9', toggleFullscreen);
-  uiButtons[uiButtons.length - 1].onLift = true;
+  fsSlot = { x: x + uiShift, y, w, h, label: 'Full screen', color: '#3d8bd9' };
   return true;
 }
 
@@ -1721,6 +1739,7 @@ function drawMenu() {
   nameText('cece', 800, 712, 74);
   nameText('cleo', 1065, 690, 78);
   button('PLAY', W / 2, 818, 280, 84, '#4caf6a', () => { state = 'levels'; });
+  text('v' + GAME_VERSION, -uiShift + 30, 875, 18, 'rgba(255,255,255,0.8)', { align: 'left', stroke: 'rgba(0,0,0,0.3)', strokeW: 4, weight: 500 });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
 }
@@ -1776,6 +1795,7 @@ function setUI() { ctx.setTransform(uiScale, 0, 0, uiScale, 0, uiOffY * uiScale)
 function render() {
   music.update();
   uiButtons = [];
+  fsSlot = null;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#120d22'; ctx.fillRect(0, 0, canvas.width, canvas.height);
   if (state === 'menu' || state === 'levels') {
@@ -1801,11 +1821,28 @@ function render() {
   }
 }
 
+const fsBtn = document.getElementById('fsbtn');
+let fsKey = '';
+function placeFsButton() {
+  const k = fsSlot ? [fsSlot.label, fsSlot.x, fsSlot.y, fsSlot.w, fsSlot.h, uiScale, uiOffY, dpr].join() : 'none';
+  if (k === fsKey) return;
+  fsKey = k;
+  if (!fsSlot) { fsBtn.style.display = 'none'; return; }
+  const s = uiScale / dpr;
+  Object.assign(fsBtn.style, {
+    display: 'block', left: (fsSlot.x - fsSlot.w / 2) * s + 'px', top: (fsSlot.y - fsSlot.h / 2 + uiOffY) * s + 'px',
+    width: fsSlot.w * s + 'px', height: fsSlot.h * s + 'px', fontSize: fsSlot.h * 0.42 * s + 'px', background: fsSlot.color,
+  });
+  fsBtn.textContent = fsSlot.label;
+}
+fsBtn.addEventListener('click', () => { sfx.init(); toggleFullscreen(); });
+
 let last = performance.now(), acc = 0;
 function loop(now) {
   acc += Math.min(100, now - last); last = now;
   while (acc >= STEP) { step(); acc -= STEP; }
   render();
+  placeFsButton();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);

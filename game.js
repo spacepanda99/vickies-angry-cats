@@ -12,7 +12,7 @@ const CAM_TOP = 885 - VIEW_H;              // resting camera: floor near the bot
 const FORT_X = 550;                        // level layouts are written at x 900-1400; this pushes them off-screen right
 const SLING = { x: 300, y: 640 };
 const MAX_PULL = 130;
-const SNAP_PULL = 120;                     // CeCe is heavy: pull her almost all the way and the band snaps
+const SNAP_PULL = 124;                     // CeCe is heavy: pull her right to the end and the band snaps
 const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
@@ -37,7 +37,7 @@ const CATS = {
           body: '#9a9ea6', dark: '#5f636b', belly: '#d9dbe0', eye: '#b8e04a',
           power: 'split', hint: 'Tap for ninja clones!' },
   // CeCe weighs a ton: she launches weak, lands short, then rolls like a bowling ball.
-  cece: { name: 'CeCe', r: 44, density: 0.014, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
+  cece: { name: 'CeCe', r: 56, density: 0.00864, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
           body: '#959ca5', dark: '#5c626b', belly: '#f4f5f7', eye: '#e8b33a',
           power: 'shake', hint: 'Tap for the head shake!' },
   cleo: { name: 'Cleo', r: 34, density: 0.004, restitution: 0.3, friction: 0.5,

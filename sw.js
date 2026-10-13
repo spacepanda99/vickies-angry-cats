@@ -1,5 +1,5 @@
 // Offline support once installed: serve the game files from cache, refresh them in the background.
-const CACHE = 'angry-cats-v4';
+const CACHE = 'angry-cats-v5';
 const FILES = ['./', './index.html', './game.js', './matter.min.js', './manifest.json', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

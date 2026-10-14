@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 52;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 53;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -32,7 +32,7 @@ const MATS = {
   glass: { density: 0.001, health: 30,  fill: 'rgba(175,225,255,0.55)', edge: '#6fb6e3', points: 300 },
   stone: { density: 0.004, health: 260, fill: '#a0a6ae', edge: '#5b6068', points: 800 },
   // levels 7-10
-  book:   { density: 0.0018, health: 60, fill: '#e98f8f', edge: '#8a4b4b', points: 400 },             // domino books
+  book:   { density: 0.0018, health: 60, friction: 0.3, fill: '#e98f8f', edge: '#8a4b4b', points: 400 },             // domino books (slippery, so the chain falls all the way)
   catnip: { density: 0.0015, health: 22, fill: '#8fd07a', edge: '#3f7a3c', points: 300, explodes: true }, // like TNT
   decoy:  { density: 0.0008, health: 15, fill: '#d9b98c', edge: '#9a7a50', points: 3000 },           // cardboard boss
   yarnball: { density: 0.006, fill: '#7fb3e6', edge: '#4a7fb3', points: 0 },                         // rolling boulder (unbreakable)
@@ -160,12 +160,14 @@ const LEVELS = [
     const r3 = hut(lv, 1110, r2, 124, 90, 'glass', 'wood'); coon(lv, 1110, r2);
     loot(lv, 1110, r3, 'fish');
   } },
-  { name: 'Attic Hideout', cats: ['cece', 'cleo', 'baby'], build(lv) {
-    block(lv, 'stone', 880, GROUND - 90, 30, 180);
+  // CeCe's first turn up front: she can't fly this far, but she bowls into the tower's stone footing and a
+  // well-timed shake brings the whole thing down. The rafter raccoon is out of her reach: that's for the flyers.
+  { name: 'Attic Hideout', cats: ['cece', 'cleo', 'baby'], intro: 'Roll CeCe into the tower, then tap to shake!', build(lv) {
     let t = GROUND;
-    for (let i = 0; i < 3; i++) { const nt = hut(lv, 1340, t, 124, 120, i === 1 ? 'glass' : 'wood', 'wood'); coon(lv, 1340, t); t = nt; }
-    coon(lv, 1340, t);
-    const s = hut(lv, 1110, GROUND, 140, 80, 'wood', 'stone'); loot(lv, 1110, GROUND, 'fish'); loot(lv, 1110, s, 'yarn');
+    for (let i = 0; i < 3; i++) { const nt = hut(lv, 1430, t, 124, 120, i === 0 ? 'stone' : i === 1 ? 'glass' : 'wood', 'wood'); coon(lv, 1430, t, false, i > 0); t = nt; }
+    coon(lv, 1430, t);
+    const r = shelf(lv, 1080, 650, 120); coon(lv, 1060, r); loot(lv, 1118, r, 'yarn');   // up in the rafters
+    loot(lv, 1250, GROUND, 'fish');
   } },
   { name: 'The Big Boss Bandit', cats: ['cleo', 'baby', 'cece'], build(lv) {
     const t = hut(lv, 1200, GROUND, 320, 150, 'stone', 'stone'); coon(lv, 1200, GROUND, true);
@@ -177,33 +179,38 @@ const LEVELS = [
   // Levels 7-10 borrow classic Angry Birds set pieces: chain-reaction dominoes, rolling boulders,
   // TNT, balloons (Danger Above) and the cardboard King Pig decoy (Mighty Hoax).
   { name: 'Bookshelf Dominoes', cats: ['cleo', 'baby', 'cece'], build(lv) {
-    for (let i = 0; i < 9; i++) book(lv, 820 + i * 38, 112 + (i % 3) * 8);   // knock the first one over...
-    const t = hut(lv, 1236, GROUND, 150, 100, 'glass', 'wood'); coon(lv, 1236, GROUND); loot(lv, 1236, t, 'fish');
+    for (let i = 0; i < 7; i++) book(lv, 820 + i * 50, 120 + (i % 3) * 8);   // knock the first one over...
+    book(lv, 1185, 150); catnip(lv, 1185, GROUND - 150);                     // ...and the last one drops the catnip
+    const t = hut(lv, 1340, GROUND, 150, 100, 'glass', 'wood'); coon(lv, 1340, GROUND); loot(lv, 1340, t, 'fish');
     const s1 = shelf(lv, 1050, 610, 230); coon(lv, 1000, s1); coon(lv, 1100, s1); mug(lv, 1152, s1);
     const s2 = shelf(lv, 1360, 560, 170); coon(lv, 1335, s2); loot(lv, 1410, s2, 'yarn');
   } },
   { name: 'Yarn Ball Avalanche', cats: ['baby', 'cece', 'cleo'], build(lv) {
-    ramp(lv, [[880, GROUND], [880, 600], [1140, GROUND]]);
-    const top = shelf(lv, 852, 584, 84); yarnBall(lv, 856, top, 44);           // nudge it down the slide
+    // a cardboard hill low enough for CeCe to bowl up: she shoves the yarn ball off the top
+    ramp(lv, [[720, GROUND], [860, GROUND - 130], [920, GROUND - 130], [1140, GROUND]]);
+    yarnBall(lv, 890, GROUND - 130, 44);                                    // nudge it down the slide
     hut(lv, 1250, GROUND, 140, 100, 'glass', 'wood'); coon(lv, 1250, GROUND);
     const t1 = hut(lv, 1390, GROUND, 140, 100, 'wood', 'glass'); coon(lv, 1390, GROUND);
     const t2 = hut(lv, 1390, t1, 120, 90, 'glass', 'wood'); coon(lv, 1390, t1);
     yarnBall(lv, 1390, t2, 36);
   } },
-  { name: 'Catnip Kaboom', cats: ['cece', 'baby', 'cleo'], build(lv) {
-    const s1 = hut(lv, 1050, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1050, GROUND);
+  // CeCe goes last here: one shake on the floor crates set off the whole chain, so she's the closer
+  { name: 'Catnip Kaboom', cats: ['baby', 'cleo', 'cece'], build(lv) {
+    const s1 = hut(lv, 1050, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1050, GROUND, false, true);
     const w = hut(lv, 1050, s1, 120, 90, 'wood', 'wood'); coon(lv, 1050, s1); catnip(lv, 1050, w);
-    const s2 = hut(lv, 1330, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1330, GROUND);
+    const s2 = hut(lv, 1330, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1330, GROUND, false, true);
     coon(lv, 1300, s2); catnip(lv, 1385, s2);
     catnip(lv, 930, GROUND); catnip(lv, 1190, GROUND); catnip(lv, 1450, GROUND);
     cucumber(lv, 850);                                                      // who left that there?
   } },
-  { name: 'Balloon Getaway', cats: ['cleo', 'baby', 'cece'], build(lv) {
+  // The boss up on the shelf is a cardboard decoy; the real one hides on the floor underneath. Only a
+  // shake from CeCe, rolled right up against him, takes him out, so she goes first while the lane is clear.
+  { name: 'Balloon Getaway', cats: ['cece', 'cleo', 'baby'], build(lv) {
     floatie(lv, 1000, 570); floatie(lv, 1250, 505);
-    decoy(lv, 1180);                                                        // the boss? not quite...
-    block(lv, 'glass', 1325, GROUND - 60, 20, 120);
-    hut(lv, 1440, GROUND, 170, 150, 'stone', 'stone'); coon(lv, 1440, GROUND, true);
-    loot(lv, 1400, GROUND, 'fish');
+    const s = shelf(lv, 1420, 640, 220); block(lv, 'decoy', 1420, s - 70, 92, 140);   // the boss? not quite...
+    coon(lv, 1420, GROUND, true);
+    block(lv, 'stone', 1560, GROUND - 90, 30, 180);
+    loot(lv, 1520, GROUND, 'fish');
   } },
   // Fan favourites: Rio's caged friends to set free, a Rube Goldberg chain (yarn ball, slide, catnip),
   // helmet-wearing toughies, and a hidden golden egg (here a golden fish) for the bonus hunters.
@@ -234,14 +241,17 @@ const LEVELS = [
   // Magic portals from Angry Birds Seasons, done as a pair of cat flaps. The raccoons are holed up behind
   // tall stone walls; fly through the purple flap and burst out of the orange one inside their fort.
   { name: 'Magic Cat Flaps', cats: ['baby', 'cleo', 'cece'], build(lv) {
-    portal(lv, 860, 560, 1065, 600);
+    // the purple flap sits on the floor (even a rolling CeCe drops in); the orange one is way up high,
+    // pointing straight at a lookout perched above the walls
+    portal(lv, 760, 742, 1090, 360);
     block(lv, 'stone', 1010, GROUND - 150, 30, 300);                        // the walls: too tough to bash through
     block(lv, 'stone', 1480, GROUND - 150, 30, 300);
+    const p = shelf(lv, 1200, 410, 110); coon(lv, 1200, p);
     hut(lv, 1110, GROUND, 120, 100, 'wood', 'glass'); coon(lv, 1110, GROUND);
     catnip(lv, 1215, GROUND);
     const t = hut(lv, 1340, GROUND, 150, 120, 'glass', 'wood'); coon(lv, 1340, GROUND, false, true); coon(lv, 1340, t);
     loot(lv, 1440, GROUND, 'fish');
-    const g = shelf(lv, 1440, 430, 70); loot(lv, 1440, g, 'goldfish');     // the secret: come out of the orange flap climbing steeply
+    const g = shelf(lv, 1420, 390, 70); loot(lv, 1420, g, 'goldfish');     // the secret: roll CeCe through the flap just right
   } },
   // Moving targets, the next step up: the raccoons have hijacked the robot vacuum (cats' sworn enemy) and
   // ride it back and forth, and one swings overhead in a laundry basket. Time your shots, or claw the rope.
@@ -618,7 +628,7 @@ function makeBlock(b) {
     return body;
   }
   const body = Bodies.rectangle(b.x, b.y, b.w, b.h, b.fixed ? { isStatic: true, friction: 0.8, label: 'block' } : {
-    density: m.density, friction: 0.8, frictionStatic: 1.2, restitution: 0.05, label: 'block' });
+    density: m.density, friction: m.friction || 0.8, frictionStatic: m.friction ? m.friction * 1.5 : 1.2, restitution: 0.05, label: 'block' });
   const hp = b.fixed || m.health === undefined ? undefined : m.health * Math.max(0.6, Math.min(2.5, (b.w * b.h) / 2000));
   body.game = { kind: 'block', mat: b.mat, w: b.w, h: b.h, hp, maxHp: hp, seed: Math.random() * 1000, fixed: b.fixed };
   return body;
@@ -748,7 +758,7 @@ function onCollide(ev) {
     const a = p.bodyA, b = p.bodyB, ga = a.game, gb = b.game;
     if (ga && ga.prancing) ga.landed = true;
     if (settle === 0) for (const [c, o] of [[a, b], [b, a]]) if (c.game && c.game.kind === 'cat' && Vector.magnitude(Vector.sub(c.velocity, o.velocity)) > 6) c.game.bonked = true;
-    for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon')) c.bump = true;
+    for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon') && !o.fixed && !o.poly) c.bump = true;   // shelves and slides don't soak it up
     if (gb && gb.prancing) gb.landed = true;
     if (ga && gb) {
       if (ga.kind === 'cat' && gb.kind === 'loot') { gb.collected = true; kill(b); }

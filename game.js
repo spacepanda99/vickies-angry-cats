@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 35;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 36;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -546,7 +546,8 @@ function makeFloat(f) {
 function makeCoon(c) {
   const body = Bodies.circle(c.x, c.y, c.r, { density: 0.0025, friction: 0.7, restitution: 0.15, label: 'coon' });
   const hp = c.boss ? 320 : c.helmet ? 75 : 30;   // a colander helmet makes them much tougher
-  body.game = { kind: 'coon', r: c.r, boss: c.boss, helmet: c.helmet, hp, maxHp: hp, blink: Math.random() * 200 };
+  body.game = { kind: 'coon', r: c.r, boss: c.boss, helmet: c.helmet, hp, maxHp: hp, blink: Math.random() * 200,
+    act: c.boss ? 'fish' : pick(COON_ACTS) };   // what it's doing with the loot
   return body;
 }
 function makeLoot(l) {
@@ -861,6 +862,11 @@ function step() {
     Body.setAngularVelocity(b, b.angularVelocity * 0.98);
   }
   updateLaser();
+  if (frame % 6 === 0) for (const b of bodies()) {
+    const g = b.game;
+    if (g && g.kind === 'coon' && !g.dead && coonChewing(g, frame + g.blink))
+      particles.push({ type: 'chip', x: b.position.x + rand(-6, 6), y: b.position.y + g.r * 0.5, vx: rand(-1, 1), vy: rand(-1, 0.5), s: rand(3, 5), rot: rand(0, 6), vr: rand(-0.3, 0.3), color: g.act === 'fish' ? '#ffb46b' : '#b5773a', life: 22, max: 22 });
+  }
   Engine.update(engine, STEP);
   if (settle > 0) settle--;
   if (snapTimer > 0) snapTimer--;
@@ -1426,6 +1432,61 @@ function drawCat(x, y, r, ang, type, opts = {}) {
   ctx.restore();
 }
 
+// The raccoons enjoy what they stole while they wait: nibbling a fish treat, munching from a bag of
+// cat treats, juggling a ball of yarn, or swinging a toy mouse by its tail.
+const COON_ACTS = ['fish', 'treats', 'yarn', 'mouse'];
+function coonChewing(g, t) {
+  if (g.act === 'fish') return t % 120 < 42 && Math.floor(t / 5) % 2 === 0;
+  if (g.act === 'treats') { const c = (t % 90) / 90; return c > 0.5 && c < 0.8 && Math.floor(t / 5) % 2 === 0; }
+  return false;
+}
+function coonPaw(x, y, r) { ctx.fillStyle = '#5d636b'; ctx.beginPath(); ctx.ellipse(x, y, r * 0.15, r * 0.12, 0, 0, 7); ctx.fill(); ctx.strokeStyle = '#3f434a'; ctx.lineWidth = r * 0.04; ctx.stroke(); }
+function drawCoonToy(r, g, t) {
+  // drawn bigger than life so it reads at phone size
+  ctx.save(); ctx.translate(0, r * 0.6); ctx.scale(1.6, 1.6); ctx.translate(0, -r * 0.6);
+  if (g.act === 'fish') {
+    // holds a fish treat up to its mouth and takes quick nibbles
+    const nib = t % 120 < 42, lift = nib ? Math.abs(Math.sin(t * 0.6)) * r * 0.08 : 0, y = r * 0.6 - lift;
+    ctx.fillStyle = '#ff9a3c';
+    ctx.beginPath(); ctx.ellipse(-r * 0.04, y, r * 0.26, r * 0.13, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(r * 0.18, y); ctx.lineTo(r * 0.38, y - r * 0.13); ctx.lineTo(r * 0.38, y + r * 0.13); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-r * 0.2, y - r * 0.03, r * 0.03, 0, 7); ctx.fill();
+    coonPaw(-r * 0.3, y + r * 0.08, r); coonPaw(r * 0.22, y + r * 0.08, r);
+  } else if (g.act === 'treats') {
+    // a bag of cat treats: paw in, treat to mouth, munch
+    const c = (t % 90) / 90, bx = r * 0.5, by = r * 0.62;
+    ctx.fillStyle = '#7fb3e6'; rr(bx - r * 0.2, by - r * 0.26, r * 0.4, r * 0.52, r * 0.06); ctx.fill();
+    ctx.strokeStyle = '#4a7fb3'; ctx.lineWidth = r * 0.04; ctx.stroke();
+    ctx.fillStyle = '#ff9a3c'; ctx.beginPath(); ctx.ellipse(bx - r * 0.02, by + r * 0.04, r * 0.1, r * 0.06, 0, 0, 7); ctx.fill();   // fish on the label
+    ctx.beginPath(); ctx.moveTo(bx + r * 0.06, by + r * 0.04); ctx.lineTo(bx + r * 0.13, by - r * 0.01); ctx.lineTo(bx + r * 0.13, by + r * 0.09); ctx.closePath(); ctx.fill();
+    const k = c < 0.5 ? Math.sin(c / 0.5 * Math.PI / 2) : c < 0.8 ? 1 : 1 - (c - 0.8) / 0.2;   // 0 = in the bag, 1 = at the mouth
+    const px = bx - r * 0.05 - k * r * 0.45, py = by - r * 0.3 - k * r * 0.0 + Math.sin(k * Math.PI) * -r * 0.15;
+    if (c < 0.6) { ctx.fillStyle = '#b5773a'; ctx.beginPath(); ctx.arc(px - r * 0.06, py - r * 0.06, r * 0.06, 0, 7); ctx.fill(); }
+    coonPaw(px, py, r); coonPaw(bx + r * 0.05, by + r * 0.2, r);
+  } else if (g.act === 'yarn') {
+    // juggling a little ball of yarn from paw to paw
+    const a = t * 0.06, sx = Math.sin(a), bx = sx * r * 0.5, by = r * 0.62 - Math.abs(Math.cos(a)) * r * 0.42;
+    const catchL = sx < -0.8, catchR = sx > 0.8;
+    ctx.strokeStyle = '#c63f7f'; ctx.lineWidth = r * 0.03;
+    ctx.beginPath(); ctx.moveTo(bx, by + r * 0.1); ctx.quadraticCurveTo(bx * 0.5, r * 0.8, -r * 0.1, r * 0.82); ctx.stroke();
+    ctx.fillStyle = '#ff6fae'; ctx.beginPath(); ctx.arc(bx, by, r * 0.15, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#c63f7f';
+    for (const e of [-0.6, 0.6]) { ctx.beginPath(); ctx.ellipse(bx, by, r * 0.15, r * 0.06, e + a, 0, 7); ctx.stroke(); }
+    coonPaw(-r * 0.5, r * 0.72 - (catchL ? r * 0.06 : 0), r); coonPaw(r * 0.5, r * 0.72 - (catchR ? r * 0.06 : 0), r);
+  } else if (g.act === 'mouse') {
+    // swinging a toy mouse by its tail
+    const sw = Math.sin(t * 0.07) * 0.7, hx = r * 0.55, hy = r * 0.08;
+    ctx.save(); ctx.translate(hx, hy); ctx.rotate(sw);
+    ctx.strokeStyle = '#d98fa8'; ctx.lineWidth = r * 0.035;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(r * 0.06, r * 0.2, 0, r * 0.34); ctx.stroke();
+    ctx.fillStyle = '#b9b2c8'; ctx.beginPath(); ctx.ellipse(0, r * 0.5, r * 0.12, r * 0.18, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#f2a7c0'; for (const e of [-1, 1]) { ctx.beginPath(); ctx.arc(e * r * 0.08, r * 0.62, r * 0.06, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(0, r * 0.68, r * 0.025, 0, 7); ctx.fill();
+    ctx.restore();
+    coonPaw(hx, hy, r); coonPaw(-r * 0.35, r * 0.7, r);
+  }
+  ctx.restore();
+}
 function drawCoon(x, y, r, ang, g) {
   ctx.save();
   ctx.translate(x, y); ctx.rotate(ang);
@@ -1452,12 +1513,15 @@ function drawCoon(x, y, r, ang, g) {
       continue;
     }
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex, ey, r * 0.13, 0, 7); ctx.fill();
-    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex - r * 0.05, ey + r * 0.01, r * 0.07, 0, 7); ctx.fill();
+    const look = g && g.act === 'yarn' ? Math.sin((frame + g.blink) * 0.06) * r * 0.05 : -r * 0.05;
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex + look, ey + r * 0.01, r * 0.07, 0, 7); ctx.fill();
   }
   // nose + smirk
   ctx.fillStyle = '#16171b'; ctx.beginPath(); ctx.ellipse(0, r * 0.22, r * 0.13, r * 0.09, 0, 0, 7); ctx.fill();
   ctx.strokeStyle = '#2a2b30'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(-r * 0.2, r * 0.45); ctx.quadraticCurveTo(r * 0.02, r * 0.55, r * 0.26, r * 0.36); ctx.stroke();
+  const t = frame + (g && g.blink || 0), chew = g && g.act && coonChewing(g, t);
+  if (chew) { ctx.fillStyle = '#2a2b30'; ctx.beginPath(); ctx.ellipse(0, r * 0.44, r * 0.12, r * 0.08, 0, 0, 7); ctx.fill(); }
+  else { ctx.beginPath(); ctx.moveTo(-r * 0.2, r * 0.45); ctx.quadraticCurveTo(r * 0.02, r * 0.55, r * 0.26, r * 0.36); ctx.stroke(); }
   if (g && g.boss) { ctx.fillStyle = '#ffd23f'; ctx.fillRect(-r * 0.02, r * 0.47, r * 0.1, r * 0.1); }
   // hat: beanie for the crew, top hat for the boss, a kitchen colander for the tough ones
   if (g && g.helmet) {
@@ -1488,6 +1552,7 @@ function drawCoon(x, y, r, ang, g) {
     ctx.fillStyle = '#f2d2a9'; rr(-r * 0.28, -r * 0.08, r * 0.56, r * 0.16, r * 0.05); ctx.fill();
     ctx.restore();
   }
+  if (g && g.act) drawCoonToy(r, g, t);
   ctx.lineCap = 'butt';
   ctx.restore();
   if (g && g.boss && g.hp < g.maxHp) {
@@ -1945,7 +2010,7 @@ function drawWon() {
 function drawLost() {
   panel(W / 2, H / 2, 640, 400);
   text('They got away!', W / 2, 320, 56, '#7a5a9a', { stroke: '#fff', strokeW: 6 });
-  drawCoon(W / 2, 420, 46, Math.sin(frame * 0.08) * 0.15, { hp: 30, maxHp: 30, blink: 0 });
+  drawCoon(W / 2, 420, 46, Math.sin(frame * 0.08) * 0.15, { hp: 30, maxHp: 30, blink: 0, act: 'fish' });
   text('The raccoons are laughing. Try again!', W / 2, 500, 24, '#9a8a7a', { weight: 500 });
   button('Levels', W / 2 - 110, 590, 180, 72, '#8e7cc3', () => { state = 'levels'; });
   button('Try again', W / 2 + 110, 590, 200, 72, '#f2994a', () => loadLevel(levelIdx));
@@ -1967,7 +2032,7 @@ function menuLoot(type, x, y, a, s) {
 // the whole gang huddled off to the side, plotting over the boss's plan
 function drawHuddle() {
   const cx = 1380, w = k => Math.sin(frame * 0.07 + k);
-  const coon = (x, y, r, tilt, k, boss) => drawCoon(x, y - Math.max(0, w(k)) * 4, r, tilt + w(k) * 0.05, { hp: 30, maxHp: 30, blink: k * 53, boss });
+  const coon = (x, y, r, tilt, k, boss) => drawCoon(x, y - Math.max(0, w(k)) * 4, r, tilt + w(k) * 0.05, { hp: 30, maxHp: 30, blink: k * 53, boss, act: boss ? 'fish' : COON_ACTS[k % 4] });
   coon(cx - 122, 682, 46, 0.32, 1);
   coon(cx + 122, 682, 46, -0.32, 2);
   coon(cx, 612, 56, 0, 0, true);

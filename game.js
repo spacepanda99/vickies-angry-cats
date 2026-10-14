@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 36;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 37;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -40,6 +40,7 @@ const MATS = {
   ramp:   { fill: '#e2c69c', edge: '#a8875a', points: 0 },                                           // fixed cardboard slide
   cage:   { density: 0.0015, health: 30, fill: 'rgba(225,235,250,0.3)', edge: '#7d8594', points: 0 },    // a kitten is locked inside
   mug:    { density: 0.0012, health: 14, fill: '#f7f3ea', edge: '#8f8676', points: 1500 },             // Easter egg: knock it off!
+  cucumber: { density: 0.0012, fill: '#5aa846', edge: '#2f6b28', points: 0 },                         // Easter egg: cats vs cucumbers (unbreakable)
 };
 
 const CATS = {
@@ -107,6 +108,10 @@ function floatie(lv, x, y) { lv.floats.push({ x, y }); }
 function bubble(lv, x, y, r) { lv.bubbles.push({ x, y, r }); }
 // a mug sitting on something. Cats knock things off tables: break it for a bonus
 function mug(lv, x, base) { block(lv, 'mug', x, base - 15, 26, 30); }
+// later-level Easter eggs: a cucumber on the floor (a cat that touches it leaps in fright),
+// and a patch of sunshine where a cat that comes to rest curls up for a nap
+function cucumber(lv, x) { block(lv, 'cucumber', x, GROUND - 10, 70, 20); }
+function sunbeam(lv, x, w) { lv.sunbeam = { x, w }; }
 
 // Every level gets each cat exactly once.
 const LEVELS = [
@@ -173,6 +178,7 @@ const LEVELS = [
     const s2 = hut(lv, 1330, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1330, GROUND);
     coon(lv, 1300, s2); catnip(lv, 1385, s2);
     catnip(lv, 930, GROUND); catnip(lv, 1190, GROUND); catnip(lv, 1450, GROUND);
+    cucumber(lv, 850);                                                      // who left that there?
   } },
   { name: 'Balloon Getaway', cats: ['cleo', 'baby', 'cece'], build(lv) {
     floatie(lv, 1000, 570); floatie(lv, 1250, 505);
@@ -184,6 +190,7 @@ const LEVELS = [
   // Fan favourites: Rio's caged friends to set free, a Rube Goldberg chain (yarn ball, slide, catnip),
   // helmet-wearing toughies, and a hidden golden egg (here a golden fish) for the bonus hunters.
   { name: 'Kitten Rescue', cats: ['baby', 'cece', 'cleo'], build(lv) {
+    sunbeam(lv, 640, 160);                                                  // a warm spot for a nap
     ramp(lv, [[900, GROUND], [900, 600], [1110, GROUND]]);
     const top = shelf(lv, 872, 592, 80); yarnBall(lv, 875, top, 40);      // nudge it: it rolls into the catnip...
     catnip(lv, 1135, GROUND);
@@ -494,6 +501,9 @@ let bubbles = [];                   // zero-gravity zones in this level
 const BOX = { x: 1000, w: 110, h: 64 };
 let boxCat = null;                  // which cat climbed into the box ("if I fits, I sits")
 let laser = null, laserWait = 0, laserCaught = false;
+let cucumberScare = false, sun = null, napCat = null;
+let eggBanner = null;               // the big 'you found an Easter egg' badge
+const EGG_LEN = 140;
 
 let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
@@ -522,7 +532,7 @@ function makeBlock(b) {
   }
   const body = Bodies.rectangle(b.x, b.y, b.w, b.h, b.fixed ? { isStatic: true, friction: 0.8, label: 'block' } : {
     density: m.density, friction: 0.8, frictionStatic: 1.2, restitution: 0.05, label: 'block' });
-  const hp = b.fixed ? undefined : m.health * Math.max(0.6, Math.min(2.5, (b.w * b.h) / 2000));
+  const hp = b.fixed || m.health === undefined ? undefined : m.health * Math.max(0.6, Math.min(2.5, (b.w * b.h) / 2000));
   body.game = { kind: 'block', mat: b.mat, w: b.w, h: b.h, hp, maxHp: hp, seed: Math.random() * 1000, fixed: b.fixed };
   return body;
 }
@@ -588,6 +598,7 @@ function loadLevel(i) {
   flying = []; powerUsed = false; flyTimer = 0; outTimer = 0; winTimer = -1;
   settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
+  sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
   bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
   if (bubbles.length) popups.push({ x: fortCenter, y: 330, text: 'Zero gravity inside the bubbles!', life: 150, big: true });
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
@@ -621,6 +632,10 @@ function onCollide(ev) {
     if (ga && gb) {
       if (ga.kind === 'cat' && gb.kind === 'loot') { gb.collected = true; kill(b); }
       else if (gb.kind === 'cat' && ga.kind === 'loot') { ga.collected = true; kill(a); }
+      if (!cucumberScare && settle === 0) {
+        if (ga.kind === 'cat' && gb.mat === 'cucumber') scareCat(a, b);
+        else if (gb.kind === 'cat' && ga.mat === 'cucumber') scareCat(b, a);
+      }
     }
     if (settle > 0) continue;
     const rel = Vector.magnitude(Vector.sub(a.velocity, b.velocity));
@@ -777,9 +792,35 @@ function sitInBox(b) {
   const g = b.game;
   boxCat = g.type; g.done = true; g.boxed = true;
   Composite.remove(engine.world, b);
-  addScore(2500, { x: BOX.x, y: GROUND - BOX.h - 40 }, g.type === 'cece' ? 'If I fits... I sits! (barely) +2500' : 'If I fits, I sits! +2500');
-  sparkle({ x: BOX.x, y: GROUND - BOX.h }, 10); sfx.ding();
+  eggBonus(g.type === 'cece' ? 'If I fits... I sits!' : 'If I fits, I sits!', 2500, { x: BOX.x, y: GROUND - BOX.h - 20 }, g.type === 'cece' ? '(barely)' : null);
   sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6, 0.1);
+}
+// Every Easter egg: points, a big '+' over the spot, and a badge across the screen with a happy jingle
+function eggBonus(title, pts, pos, sub) {
+  score += pts;
+  popups.push({ x: pos.x, y: pos.y - 20, text: '+' + pts.toLocaleString(), life: 100, egg: true });
+  eggBanner = { title, sub: sub || null, pts, t: 0 };
+  sparkle(pos, 16);
+  [784, 988, 1175, 1568].forEach((f, i) => sfx.tone('triangle', f, f, 0.16, 0.13, i * 0.08));
+}
+// a cat that touches the cucumber jumps sky high
+function scareCat(cat, cuc) {
+  cucumberScare = true;
+  Body.setVelocity(cat, { x: -4, y: -17 }); cat.game.rest = 0;
+  eggBonus('CUCUMBER!!', 2000, cuc.position, 'Who put that there?!');
+  for (let i = 0; i < 18; i++) {
+    const a = rand(0, Math.PI * 2), sp = rand(3, 8), t = CATS[cat.game.type];
+    particles.push({ type: 'fur', x: cat.position.x, y: cat.position.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 2, s: rand(7, 13), rot: a, vr: rand(-0.2, 0.2), life: 40, max: 40, color: i % 2 ? t.body : t.belly });
+  }
+  sfx.cat(CAT_SOUNDS.snap, 0.75);
+}
+// a cat that comes to rest in the sunbeam curls up and goes to sleep there
+function takeNap(b) {
+  const g = b.game;
+  napCat = { type: g.type, x: b.position.x }; g.done = true; g.boxed = true;
+  Composite.remove(engine.world, b);
+  eggBonus('Sunbeam nap', 2000, { x: napCat.x, y: GROUND - 60 }, 'Zzz...');
+  sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.4, 0.2);
 }
 // the red laser dot: now and then while aiming it skitters around the floor near the slingshot
 function updateLaser() {
@@ -795,7 +836,7 @@ function updateLaser() {
 }
 function catchLaser() {
   laserCaught = true;
-  addScore(500, laser, 'Got the red dot! +500'); sparkle(laser, 10);
+  eggBonus('Got the red dot!', 500, laser, 'Pounce!');
   [current, ...queue].forEach((type, who) => chatter.push({ type, who, t: 1 + who * 6, life: CHATTER_LIFE, sym: '!' }));
   laser = null;
 }
@@ -836,6 +877,7 @@ function step() {
     if (upBanner.t === 0) sfx.tone('sine', 260, 1100, 0.18, 0.06);   // whoosh
     if (++upBanner.t > BANNER_LEN) upBanner = null;
   }
+  if (eggBanner && ++eggBanner.t > EGG_LEN) eggBanner = null;
   popups = popups.filter(p => p.life > 0);
 
   if (!engine || state === 'menu' || state === 'levels') return;
@@ -897,6 +939,7 @@ function step() {
       }
       // rolling resistance on the floor, so a weak (snapped) roll peters out short of the fort
       if (b.position.y > GROUND - g.r - 3) Body.setVelocity(b, { x: b.velocity.x * (CATS[g.type].rollDrag || 0.99), y: b.velocity.y });
+      if (sun && !napCat && !g.done && g.rest > 15 && Math.abs(b.position.x - sun.x) < sun.w / 2 && b.position.y > GROUND - g.r - 8) { takeNap(b); continue; }
       if (!boxCat && !g.done && Math.abs(b.position.x - BOX.x) < BOX.w / 2 - 8 && b.position.y > GROUND - BOX.h - g.r && Vector.magnitude(b.velocity) < 6) { sitInBox(b); continue; }
       // CeCe is heavy but soft: everything she hits soaks up some of her speed, so she can't bulldoze a whole level
       if (g.bump) { Body.setVelocity(b, Vector.mult(b.velocity, CATS[g.type].bumpDamp)); g.bump = false; }
@@ -915,13 +958,13 @@ function step() {
       Composite.remove(engine.world, b);
       const g = b.game;
       if (g.kind === 'block' && MATS[g.mat].explodes) { addScore(MATS[g.mat].points, b.position, 'KABOOM!'); catnipBoom(b.position); }
-      else if (g.kind === 'block' && g.mat === 'mug') { addScore(MATS.mug.points, b.position, 'Oops! Knocked it off! +1500'); debris(b); sfx.crumble('glass'); sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.2); }
+      else if (g.kind === 'block' && g.mat === 'mug') { eggBonus('Oops! Knocked it off!', MATS.mug.points, b.position, 'Cats will be cats'); debris(b); sfx.crumble('glass'); sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.2); }
       else if (g.kind === 'block' && g.mat === 'decoy') { addScore(3000, b.position, 'It was a cardboard decoy!'); debris(b); sfx.crumble('decoy'); }
       else if (g.kind === 'balloon') { Composite.remove(engine.world, g.rope); addScore(200, b.position, 'POP!'); poof(b.position, 5, 0.5); sfx.tone('square', 900, 200, 0.08, 0.12); }
       else if (g.kind === 'block') { addScore(MATS[g.mat].points, b.position); debris(b); sfx.crumble(g.mat); }
       else if (g.kind === 'coon') { addScore(g.boss ? 20000 : 5000, b.position); poof(b.position, g.boss ? 18 : 10, g.boss ? 1.6 : 1); sparkle(b.position, 6); sfx.pop(); }
       else if (g.kind === 'loot' && g.collected && g.type === 'goldfish') {
-        addScore(10000, b.position, 'GOLDEN FISH! +10000'); sparkle(b.position, 24); sfx.ding(); sfx.ding();
+        eggBonus('GOLDEN FISH!', 10000, b.position, 'You found the secret!'); sparkle(b.position, 24); sfx.ding();
         goldenFound[levelIdx] = true; saveGolden();
       }
       else if (g.kind === 'loot' && g.collected) { addScore(1000, b.position, g.type === 'fish' ? 'Treat saved! +1000' : 'Yarn saved! +1000'); sparkle(b.position, 10); sfx.ding(); }
@@ -1205,7 +1248,9 @@ function furFlicks(R, count, seed, light, dark, keepClear) {
   }
 }
 // lid: 0 = wide open, ~0.5 = half closed. tilt > 0 slants the lid down toward the nose (cross / unimpressed).
+let sleepyEyes = false;            // set while drawing a sleeping cat: lids all the way down
 function catEye(ex, ey, w, h, s, color, lid, tilt, lidColor) {
+  if (sleepyEyes) { lid = 0.92; tilt = 0; }
   ctx.save();
   ctx.beginPath(); ctx.ellipse(ex, ey, w, h, 0, 0, 7); ctx.clip();
   ctx.fillStyle = color; ctx.fillRect(ex - w, ey - h, w * 2, h * 2);
@@ -1588,6 +1633,16 @@ function drawBlock(b) {
     ctx.restore();
     return;
   }
+  if (g.mat === 'cucumber') {
+    ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w, h, h / 2); ctx.fill();
+    ctx.strokeStyle = m.edge; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.strokeStyle = 'rgba(190,230,150,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(-w / 2 + 10, -h * 0.15); ctx.lineTo(w / 2 - 10, -h * 0.15); ctx.stroke();
+    ctx.fillStyle = m.edge; for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(-w / 2 + 10 + i * 10, (i % 2 ? 1 : -1) * h * 0.22 + h * 0.08, 1.5, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#8a6a3a'; ctx.fillRect(w / 2 - 2, -2, 5, 4);         // stem
+    ctx.restore();
+    return;
+  }
   if (g.mat === 'mug') {
     // a mug, sitting right where a cat can bat it off
     ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w - 5, h, 4); ctx.fill();
@@ -1780,6 +1835,29 @@ function drawBox() {
   ctx.fillStyle = 'rgba(240,225,190,0.7)'; ctx.fillRect(x - 6, top, 12, BOX.h);   // tape
   text('FRAGILE', x, top + BOX.h * 0.6, 13, '#b0473a', { weight: 700 });
 }
+function drawSunbeam() {
+  if (!sun) return;
+  const x0 = sun.x - sun.w / 2, x1 = sun.x + sun.w / 2, sh = 260;          // slants down from the window, top left
+  ctx.fillStyle = 'rgba(255,236,160,0.16)';
+  ctx.beginPath(); ctx.moveTo(x0 - sh, 300); ctx.lineTo(x1 - sh, 300); ctx.lineTo(x1, GROUND); ctx.lineTo(x0, GROUND); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,230,140,0.4)'; ctx.beginPath(); ctx.ellipse(sun.x, GROUND - 2, sun.w / 2, 9, 0, 0, 7); ctx.fill();
+  for (let i = 0; i < 6; i++) {                                           // dust motes
+    const k = (frame * 0.002 + hash(i) ) % 1;
+    ctx.fillStyle = 'rgba(255,250,220,' + (0.6 * Math.sin(k * Math.PI)) + ')';
+    ctx.beginPath(); ctx.arc(x0 - sh * (1 - k) + hash(i * 5) * sun.w, 300 + k * (GROUND - 300), 2.5, 0, 7); ctx.fill();
+  }
+  if (napCat) {
+    sleepyEyes = true;
+    drawCat(napCat.x, GROUND - 26 + Math.sin(frame * 0.05) * 1.5, 26, 0, napCat.type, { calm: true });
+    sleepyEyes = false;
+    for (let i = 0; i < 3; i++) {
+      const k = (frame * 0.012 + i / 3) % 1;
+      ctx.globalAlpha = Math.sin(k * Math.PI);
+      text('z', napCat.x + 22 + k * 34, GROUND - 58 - k * 60, 16 + k * 16, '#ffffff', { stroke: '#3a2160', strokeW: 4 });
+    }
+    ctx.globalAlpha = 1;
+  }
+}
 function drawLaser() {
   if (!laser) return;
   ctx.globalAlpha = Math.min(1, laser.life / 20);
@@ -1803,6 +1881,7 @@ function drawWorld() {
   const creak = snapStrain / SNAP_DELAY;
   const sj = creak > 0 ? { x: (Math.random() - 0.5) * (3 + 8 * creak), y: (Math.random() - 0.5) * (2 + 4 * creak) } : { x: 0, y: 0 };
   ctx.save(); ctx.translate(sj.x, sj.y); drawSlingBack(); ctx.restore();
+  drawSunbeam();
   drawBox();
   // waiting cats sit in line behind the slingshot
   queueSpots().forEach((q, i) => {
@@ -1894,7 +1973,8 @@ function drawWorld() {
   ctx.globalAlpha = 1;
   for (const p of popups) {
     ctx.globalAlpha = Math.min(1, p.life / 25);
-    text(p.text, p.x, p.y, p.big ? 28 : 20, p.big ? '#ffd84a' : '#ffffff', { stroke: '#3a2160', strokeW: 5 });
+    if (p.egg) text(p.text, p.x, p.y, 46, '#ffe14d', { font: "'Luckiest Guy', " + FONT, weight: 400, stroke: '#e8578f', strokeW: 8 });
+    else text(p.text, p.x, p.y, p.big ? 28 : 20, p.big ? '#ffd84a' : '#ffffff', { stroke: '#3a2160', strokeW: 5 });
   }
   ctx.globalAlpha = 1;
 
@@ -1942,6 +2022,29 @@ function drawHUD() {
     text(hint, UW / 2, 174, 54, '#ffe14d', { stroke: '#120a26', strokeW: 10 });
   }
   drawUpBanner();
+  drawEggBanner();
+}
+
+// the Easter egg badge: pops in with an overshoot, sunburst behind, fades out
+function drawEggBanner() {
+  if (!eggBanner || (state !== 'play' && state !== 'won')) return;
+  const t = eggBanner.t, cy = upBanner && upBanner.t >= 0 ? 700 : 370;
+  const sc = t < 8 ? 0.3 + 0.9 * t / 8 : t < 14 ? 1.2 - 0.2 * (t - 8) / 6 : 1;
+  ctx.save();
+  ctx.globalAlpha = t > EGG_LEN - 20 ? (EGG_LEN - t) / 20 : 1;
+  ctx.translate(UW / 2, cy); ctx.scale(sc, sc); ctx.rotate(Math.sin(t * 0.08) * 0.02);
+  ctx.save(); ctx.rotate(t * 0.01); ctx.fillStyle = 'rgba(255,225,120,0.28)';
+  for (let i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-45, -260); ctx.lineTo(45, -260); ctx.closePath(); ctx.fill(); }
+  ctx.restore();
+  const tf = "'Luckiest Guy', " + FONT;
+  ctx.font = `400 76px ${tf}`;
+  const w = Math.max(560, ctx.measureText(eggBanner.title).width + 130);
+  ctx.fillStyle = 'rgba(24,14,48,0.92)'; rr(-w / 2, -100, w, 200, 44); ctx.fill();
+  ctx.lineWidth = 8; ctx.strokeStyle = '#ff8fb8'; ctx.stroke();
+  text(eggBanner.title, 0, -30, 76, '#ffe14d', { font: tf, weight: 400, stroke: '#e8578f', strokeW: 10 });
+  text('+' + eggBanner.pts.toLocaleString() + (eggBanner.sub ? '  ' + eggBanner.sub : ''), 0, 50, 46, '#ffffff', { stroke: '#120a26', strokeW: 8 });
+  for (const sg of [-1, 1]) { ctx.save(); ctx.translate(sg * (w / 2 - 6), -96); ctx.rotate(t * 0.05 * sg); starShape(0, 0, 30, '#ffd23f', '#b8860b'); ctx.restore(); }
+  ctx.restore();
 }
 
 function drawUpBanner() {

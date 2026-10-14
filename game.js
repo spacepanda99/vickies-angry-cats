@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 50;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 51;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -273,7 +273,12 @@ const STORE_KEY = 'vickysAngryCats.stars';
 let bestStars = {};
 try { bestStars = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { bestStars = {}; }
 function saveStars() { try { localStorage.setItem(STORE_KEY, JSON.stringify(bestStars)); } catch (e) { /* private mode */ } }
-const unlocked = i => i === 0 || (bestStars[i - 1] || 0) > 0;
+// Tap a locked level and enter the code to play it; the code then stays entered on this device.
+const UNLOCK_CODE = '7272', CODE_KEY = 'vickiesAngryCats.code';
+let codeEntered = false;
+try { codeEntered = localStorage.getItem(CODE_KEY) === UNLOCK_CODE; } catch (e) { /* private mode */ }
+const unlocked = i => i === 0 || codeEntered || (bestStars[i - 1] || 0) > 0;
+let codePad = null;                 // { level, entry, shake } while the code keypad is open
 const GOLD_KEY = 'vickiesAngryCats.golden';
 let goldenFound = {};
 try { goldenFound = JSON.parse(localStorage.getItem(GOLD_KEY)) || {}; } catch (e) { goldenFound = {}; }
@@ -474,6 +479,7 @@ const MUSIC = {
   lv12: { url: 'music-lv12.ogg', loopStart: 27.0342, loopEnd: 88.1065 },
   lv13: { url: 'music-lv13.ogg', loopStart: 43.8266, loopEnd: 96.2028 },
   lv14: { url: 'music-lv14.ogg', loopStart: 36.6798, loopEnd: 115.3441 },
+  lv15: { url: 'music-lv15.ogg', loopStart: 20.1873, loopEnd: 107.4477 },        // cool late-night vibe
 };
 // Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.
 const levelTrack = () => MUSIC['lv' + (levelIdx + 1)] && levelIdx > 0 ? 'lv' + (levelIdx + 1) : 'game';
@@ -1333,6 +1339,7 @@ canvas.addEventListener('pointerup', e => {
 canvas.addEventListener('pointercancel', release);
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('keydown', e => {
+  if (codePad && state === 'levels') { if (/^[0-9]$/.test(e.key)) codeKey(e.key); else if (e.key === 'Backspace') codePad.entry = codePad.entry.slice(0, -1); else if (e.key === 'Escape') codePad = null; return; }
   if (e.key === 'r' && (state === 'play' || state === 'won' || state === 'lost')) loadLevel(levelIdx);
   if (e.key === ' ' && state === 'play') usePower();
 });
@@ -2949,6 +2956,41 @@ function drawMenu() {
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
 }
 
+// the code keypad over the level picker
+function codeKey(d) {
+  if (!codePad || codePad.entry.length >= 4) return;
+  codePad.entry += d; sfx.tone('triangle', 900, 900, 0.05, 0.08);
+  if (codePad.entry.length === 4) {
+    if (codePad.entry === UNLOCK_CODE) {
+      codeEntered = true; try { localStorage.setItem(CODE_KEY, UNLOCK_CODE); } catch (e) { /* private mode */ }
+      const lv = codePad.level; codePad = null; sfx.ding(); loadLevel(lv);
+    } else { codePad.shake = 20; sfx.tone('sawtooth', 220, 150, 0.25, 0.08); setTimeout(() => { if (codePad) codePad.entry = ''; }, 350); }
+  }
+}
+function drawCodePad() {
+  const cx = W / 2, cy = H / 2 + 20, sh = codePad.shake > 0 ? Math.sin(codePad.shake * 1.5) * codePad.shake * 0.8 : 0;
+  if (codePad.shake > 0) codePad.shake--;
+  uiButtons.push({ x: UW / 2, y: H / 2, w: UW * 3, h: H * 3, action: () => { codePad = null; } });   // tap outside to close
+  panel(cx, cy, 460, 620);
+  uiButtons.push({ x: cx + uiShift, y: cy, w: 460, h: 620, action: () => {} });                      // taps on the panel itself do nothing
+  text(`Level ${codePad.level + 1} is locked`, cx, cy - 255, 34, '#7a5a9a');
+  text('Enter the code', cx, cy - 215, 24, '#9a8a7a', { weight: 500 });
+  for (let k = 0; k < 4; k++) {
+    const bx = cx + sh + (k - 1.5) * 70;
+    ctx.fillStyle = '#ffffff'; rr(bx - 27, cy - 185, 54, 62, 12); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = codePad.shake > 0 ? '#e8578f' : '#e8b06a'; ctx.stroke();
+    if (codePad.entry[k]) text(codePad.entry[k], bx, cy - 152, 38, '#5b3a1e');
+  }
+  ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '←'].forEach((d, k) => {
+    const bx = cx + (k % 3 - 1) * 112, by = cy - 50 + Math.floor(k / 3) * 86;
+    button(d, bx, by, 96, 72, d === 'C' ? '#c98a8a' : d === '←' ? '#8e7cc3' : '#f2994a', () => {
+      if (!codePad) return;
+      if (d === 'C') codePad.entry = '';
+      else if (d === '←') codePad.entry = codePad.entry.slice(0, -1);
+      else codeKey(d);
+    });
+  });
+}
 function drawLevels() {
   ctx.fillStyle = 'rgba(30,50,60,0.3)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
   text('Pick a level', W / 2, 120, 64, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
@@ -2973,8 +3015,10 @@ function drawLevels() {
       ctx.fillStyle = '#5d566e'; rr(x - 26, y - 10, 52, 42, 8); ctx.fill();
       ctx.strokeStyle = '#5d566e'; ctx.lineWidth = 9; ctx.beginPath(); ctx.arc(x, y - 12, 17, Math.PI, 0); ctx.stroke();
       text(String(i + 1), x, y + 70, 30, '#e9e4f2');
+      uiButtons.push({ x: x + uiShift, y, w, h, action: () => { codePad = { level: i, entry: '', shake: 0 }; } });
     }
   });
+  if (codePad) drawCodePad();
 }
 
 // ---------------------------------------------------------------- frame loop

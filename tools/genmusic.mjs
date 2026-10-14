@@ -21,10 +21,11 @@ const FLAVOUR = {
   11: 'Level flavour: a kitten rescue. Warm and heroic, rising strings and a brave clarinet melody, a caring adventurous caper.',
   12: 'Level flavour: zero gravity zoomies. A spacey retro theremin and bubbly synth arpeggios mixed with the pizzicato and marimba, floaty and fun.',
   13: 'Level flavour: magic cat flaps. Shimmering harp glissandos, celesta sparkles and a mysterious-but-playful clarinet, a feeling of magic portals.',
+  15: 'Level flavour: a cool late-night vibe, the house asleep at midnight. Mellow and smooth: soft vibraphone and celesta, a walking upright bass, brushed drums, a sly muted-trumpet or clarinet melody tiptoeing in the moonlight, still playful.',
   14: 'Level flavour: robo-vac rodeo. A cartoon western: twangy guitar, a galloping brushed-drum rhythm, whirring robotic bleeps, a rodeo-showdown fanfare feel.',
 };
 const level = +process.argv[2], model = process.argv[3] || 'lyria-3.5';
-if (!FLAVOUR[level]) throw new Error('level must be 2-14');
+if (!FLAVOUR[level]) throw new Error('no flavour for that level');
 const prompt = BASE + ' ' + FLAVOUR[level];
 const body = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseModalities: ['AUDIO', 'TEXT'] } };
 const tag = `level${level}-${model}-${Date.now()}`;

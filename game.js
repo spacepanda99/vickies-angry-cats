@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 42;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 43;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -2396,7 +2396,7 @@ function drawHuddle() {
 
 // ---- title logo: chunky scuffed cartoon letters (Angry Birds logo style), drawn once to an offscreen canvas ----
 let logoCanvas = null, logoBuiltWithFont = false;
-const LOGO_W = 1100, LOGO_H = 560, LOGO_S = 2, LOGO_PAD = 90;   // LOGO_PAD: headroom above ANGRY for the big "Vickie's"
+const LOGO_W = 1100, LOGO_H = 575, LOGO_S = 2, LOGO_PAD = 105;   // LOGO_PAD: headroom above ANGRY for the big "Vickie's"
 function buildLogo() {
   const fontReady = !document.fonts || document.fonts.check("40px 'Luckiest Guy'");
   if (logoCanvas && (logoBuiltWithFont || !fontReady)) return;
@@ -2453,8 +2453,8 @@ function buildLogo() {
   g.drawImage(fc, 0, -LOGO_PAD, LOGO_W, LOGO_H);
   // "Vickie's" tag over the top-left of the logo
   // big and hot pink so it stands out from the white-and-gold letters
-  g.save(); g.translate(LOGO_W / 2, -18); g.rotate(-0.03);                 // centred above ANGRY
-  g.font = "700 104px 'Dancing Script', 'Brush Script MT', cursive"; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.save(); g.translate(LOGO_W / 2, -24);                                  // centred and level above ANGRY
+  g.font = "700 122px 'Dancing Script', 'Brush Script MT', cursive"; g.textAlign = 'center'; g.textBaseline = 'middle';
   g.lineJoin = 'round'; g.strokeStyle = 'rgba(40,20,10,0.35)'; g.lineWidth = 22; g.strokeText("Vickie's", 5, 6);
   g.strokeStyle = '#3b2414'; g.lineWidth = 20; g.strokeText("Vickie's", 0, 0);
   g.strokeStyle = '#ffffff'; g.lineWidth = 9; g.strokeText("Vickie's", 0, 0);

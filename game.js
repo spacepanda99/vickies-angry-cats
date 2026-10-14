@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 58;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 59;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -720,7 +720,7 @@ function makeCat(type, x, y, r) {
 // the day goes by as you play: high noon on level 1, sunset by level 14, night after that
 const levelTime = i => LEVELS[i].night ? 1 : Math.min(1, i / 13);
 function loadLevel(i) {
-  levelIdx = i;
+  levelIdx = i; finale = null;
   setBackdropTime(levelTime(i));
   newEngine();
   const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [], portals: [], vacs: [], swings: [] };
@@ -1273,6 +1273,7 @@ function updatePhase() {
   }
 }
 
+let finale = null;                // after the last level: the level picker shows a congratulations ribbon
 function finishWin() {
   const unused = queue.length + (current && phase === 'aim' ? 1 : 0);
   bonus = unused * 10000;
@@ -1280,7 +1281,9 @@ function finishWin() {
   stars = unused >= 2 ? 3 : unused === 1 ? 2 : 1;
   bestStars[levelIdx] = Math.max(bestStars[levelIdx] || 0, stars);
   saveStars();
-  state = 'won';
+  // the last level goes straight back to the level picker, with a congratulations ribbon across the top
+  if (levelIdx === LEVELS.length - 1) { state = 'levels'; finale = { t: 0 }; codePad = null; }
+  else state = 'won';
   sfx.win(); music.duck(3.2); sfx.cat(CAT_SOUNDS.win, 0.55, 2.6);
 }
 
@@ -3107,19 +3110,42 @@ function drawLevels() {
   iconButton('back', 80 - uiShift + 20, 80, () => { state = 'menu'; });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
+  if (finale) {
+    // the finale ribbon: pops in
+    finale.t++;
+    const k = Math.min(1, finale.t / 14), pop = 1 + 0.12 * Math.sin(k * Math.PI) * (1 - k), msg = 'Congratulations, you saved the treats and toys.';
+    ctx.save(); ctx.translate(W / 2, 222); ctx.scale(pop * k, pop * k);
+    ctx.font = `700 42px ${FONT}`;
+    const bw = ctx.measureText(msg).width + 130;
+    ctx.fillStyle = 'rgba(24,14,48,0.9)'; rr(-bw / 2, -40, bw, 80, 40); ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
+    text(msg, 0, 2, 42, '#ffe14d', { stroke: '#120a26', strokeW: 9 });
+    starShape(-bw / 2 + 36, 0, 20, '#ffd23f', '#b8860b'); starShape(bw / 2 - 36, 0, 20, '#ffd23f', '#b8860b');
+    ctx.restore();
+  }
+  const PER_ROW = 8;
   LEVELS.forEach((lv, i) => {
-    const col = i % 7, row = Math.floor(i / 7);
-    const x = W / 2 + (col - 3) * 215, y = 335 + row * 260, w = 195, h = 210;
+    const col = i % PER_ROW, row = Math.floor(i / PER_ROW);
+    const x = W / 2 + (col - (PER_ROW - 1) / 2) * 192, y = 440 + row * 235, w = 176, h = 210;
     const open = unlocked(i);
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(x - w / 2, y - h / 2 + 8, w, h, 24); ctx.fill();
     ctx.fillStyle = open ? '#fff6e6' : '#9b93ad'; rr(x - w / 2, y - h / 2, w, h, 24); ctx.fill();
     ctx.lineWidth = 5; ctx.strokeStyle = open ? '#e8b06a' : '#7b7390'; ctx.stroke();
     if (open) {
-      text(String(i + 1), x, y - 30, 70, '#ff7a59', { stroke: '#5b3a1e', strokeW: 8 });
-      text(lv.name, x, y + 30, 19, '#5b3a1e', { weight: 500 });
+      text(String(i + 1), x, y - 48, 64, '#ff7a59', { stroke: '#5b3a1e', strokeW: 8 });
+      // long names wrap onto two lines so they fit the narrower card
+      ctx.font = `500 18px ${FONT}`;
+      const words = lv.name.split(' ');
+      let lines = [lv.name];
+      if (ctx.measureText(lv.name).width > w - 24) {
+        let best = 1, bestD = 1e9;
+        for (let k = 1; k < words.length; k++) { const d = Math.abs(ctx.measureText(words.slice(0, k).join(' ')).width - ctx.measureText(words.slice(k).join(' ')).width); if (d < bestD) { bestD = d; best = k; } }
+        lines = [words.slice(0, best).join(' '), words.slice(best).join(' ')];
+      }
+      lines.forEach((ln, li) => text(ln, x, y + 14 + (lines.length === 1 ? 10 : li * 24), 18, '#5b3a1e', { weight: 500 }));
       const s = bestStars[i] || 0;
-      if (goldenFound[i]) drawLoot({ position: { x: x + 70, y: y - 78 }, angle: -0.3, game: { type: 'goldfish' } });
-      for (let k = 0; k < 3; k++) starShape(x + (k - 1) * 38, y + 68, 15, k < s ? '#ffd23f' : '#e4dccd', k < s ? '#b8860b' : '#cfc4b1');
+      if (goldenFound[i]) drawLoot({ position: { x: x + 62, y: y - 80 }, angle: -0.3, game: { type: 'goldfish' } });
+      for (let k = 0; k < 3; k++) starShape(x + (k - 1) * 36, y + 72, 14, k < s ? '#ffd23f' : '#e4dccd', k < s ? '#b8860b' : '#cfc4b1');
       uiButtons.push({ x: x + uiShift, y, w, h, action: () => loadLevel(i) });
     } else {
       ctx.fillStyle = '#5d566e'; rr(x - 26, y - 10, 52, 42, 8); ctx.fill();

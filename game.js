@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 40;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 41;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -2396,12 +2396,12 @@ function drawHuddle() {
 
 // ---- title logo: chunky scuffed cartoon letters (Angry Birds logo style), drawn once to an offscreen canvas ----
 let logoCanvas = null, logoBuiltWithFont = false;
-const LOGO_W = 1100, LOGO_H = 470, LOGO_S = 2;
+const LOGO_W = 1100, LOGO_H = 530, LOGO_S = 2, LOGO_PAD = 60;   // LOGO_PAD: headroom above ANGRY for the big "Vickie's"
 function buildLogo() {
   const fontReady = !document.fonts || document.fonts.check("40px 'Luckiest Guy'");
   if (logoCanvas && (logoBuiltWithFont || !fontReady)) return;
   logoBuiltWithFont = fontReady;
-  const mk = () => { const c = document.createElement('canvas'); c.width = LOGO_W * LOGO_S; c.height = LOGO_H * LOGO_S; const g = c.getContext('2d'); g.scale(LOGO_S, LOGO_S); return [c, g]; };
+  const mk = () => { const c = document.createElement('canvas'); c.width = LOGO_W * LOGO_S; c.height = LOGO_H * LOGO_S; const g = c.getContext('2d'); g.scale(LOGO_S, LOGO_S); g.translate(0, LOGO_PAD); return [c, g]; };
   const [c, g] = mk(), [fc, fg] = mk();          // fc holds the white letter faces, textured on their own
   const font = size => `${size}px 'Luckiest Guy', Bangers, Impact, sans-serif`;
   // [char, size, tilt, bounce]: every letter a little crooked, like the Angry Birds logo
@@ -2450,13 +2450,16 @@ function buildLogo() {
   }
   fg.fillStyle = 'rgba(140,160,180,0.35)';
   for (let i = 0; i < 160; i++) { fg.beginPath(); fg.arc(hash(i * 9.1) * LOGO_W, 40 + hash(i * 3.3) * (LOGO_H - 80), 1 + hash(i * 1.3) * 2.2, 0, 7); fg.fill(); }
-  g.drawImage(fc, 0, 0, LOGO_W, LOGO_H);
+  g.drawImage(fc, 0, -LOGO_PAD, LOGO_W, LOGO_H);
   // "Vickie's" tag over the top-left of the logo
-  g.save(); g.translate(LOGO_W / 2 - 300, 48); g.rotate(-0.12);
-  g.font = "700 62px 'Dancing Script', 'Brush Script MT', cursive"; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.lineJoin = 'round'; g.strokeStyle = '#3b2414'; g.lineWidth = 14; g.strokeText("Vickie's", 0, 0);
-  g.strokeStyle = '#f2a91c'; g.lineWidth = 6; g.strokeText("Vickie's", 0, 0);
-  g.fillStyle = '#fff6e0'; g.fillText("Vickie's", 0, 0);
+  // big and hot pink so it stands out from the white-and-gold letters
+  g.save(); g.translate(LOGO_W / 2 - 320, 22); g.rotate(-0.12);
+  g.font = "700 104px 'Dancing Script', 'Brush Script MT', cursive"; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.strokeStyle = 'rgba(40,20,10,0.35)'; g.lineWidth = 22; g.strokeText("Vickie's", 5, 6);
+  g.strokeStyle = '#3b2414'; g.lineWidth = 20; g.strokeText("Vickie's", 0, 0);
+  g.strokeStyle = '#ffffff'; g.lineWidth = 9; g.strokeText("Vickie's", 0, 0);
+  const vg = g.createLinearGradient(0, -45, 0, 40); vg.addColorStop(0, '#ff8cc6'); vg.addColorStop(1, '#e8327f');
+  g.fillStyle = vg; g.fillText("Vickie's", 0, 0);
   g.restore();
   logoCanvas = c;
 }
@@ -2467,7 +2470,7 @@ function drawLogo(cx, top, scale) {
 
 function drawMenu() {
   ctx.fillStyle = 'rgba(30,50,60,0.22)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
-  drawLogo(W / 2, -2, 0.97);
+  drawLogo(W / 2, 2, 1.04);
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
   // the raccoon gang huddled together off to the right, away from the cats (further out on wide phones)
   const side = Math.max(0, uiShift) * 0.6;
@@ -2485,14 +2488,14 @@ function drawMenu() {
     if (!sfx.cat(pick(CAT_SOUNDS.chatter[type]), 0.65)) sfx.meow(type === 'baby' ? 1.25 : type === 'cece' ? 0.75 : 1);
   };
   for (const [type, x, y, r] of [['cece', 800, 612, 132], ['baby', 548, 650, 84], ['cleo', 1052, 646, 92]]) {
-    uiButtons.push({ x: x + uiShift, y, w: r * 2, h: r * 2.2, action: tapCat(type) });
+    uiButtons.push({ x: x + uiShift, y: y + 36, w: r * 2, h: r * 2.2, action: tapCat(type) });
   }
-  drawCat(800, 612 + bob(1) - hopOf('cece'), 132, 0, 'cece', { bright: true });
-  drawCat(548, 650 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', { bright: true });
-  drawCat(1052, 646 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', { bright: true });
-  nameText('baby', 548, 774, 62);
-  nameText('cece', 800, 800, 70);
-  nameText('cleo', 1052, 774, 72);
+  drawCat(800, 648 + bob(1) - hopOf('cece'), 132, 0, 'cece', { bright: true });
+  drawCat(548, 686 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', { bright: true });
+  drawCat(1052, 682 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', { bright: true });
+  nameText('baby', 548, 808, 62);
+  nameText('cece', 800, 836, 70);
+  nameText('cleo', 1052, 808, 72);
   button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => { state = 'levels'; });
   text('v' + GAME_VERSION, -uiShift + 30, 875, 18, 'rgba(255,255,255,0.8)', { align: 'left', stroke: 'rgba(0,0,0,0.3)', strokeW: 4, weight: 500 });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);

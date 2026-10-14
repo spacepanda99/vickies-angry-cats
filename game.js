@@ -770,7 +770,12 @@ function step() {
   if (!engine || state === 'menu' || state === 'levels') return;
   // balloons: hover their platform near its height; once any balloon pops the rest can't hold it up
   for (const f of floats) {
-    if (f.plank.game.dead) continue;
+    if (f.plank.game.dead) {
+      // the plank is gone: cut the strings and let the helium balloons drift up and away
+      if (!f.freed) { f.freed = true; for (const b of f.balloons) if (!b.game.dead) Composite.remove(engine.world, b.game.rope); }
+      for (const b of f.balloons) if (!b.game.dead) Body.applyForce(b, b.position, { x: 0, y: -b.mass * engine.gravity.scale * 1.6 });
+      continue;
+    }
     const alive = f.balloons.filter(b => !b.game.dead);
     if (!alive.length) continue;
     if (alive.length < f.balloons.length) f.broken = true;
@@ -812,7 +817,7 @@ function step() {
       if (g.bump) { Body.setVelocity(b, Vector.mult(b.velocity, CATS[g.type].bumpDamp)); g.bump = false; }
       if (frame % 2 === 0) { g.trail.push({ x: b.position.x, y: b.position.y }); if (g.trail.length > 40) g.trail.shift(); }
     }
-    if (b.position.y > H + 300 || b.position.x < -300 || b.position.x > WORLD_W + 300) {
+    if (b.position.y > H + 300 || (g && g.kind === 'balloon' && b.position.y < -600) || b.position.x < -300 || b.position.x > WORLD_W + 300) {
       if (g && g.kind === 'coon') kill(b);
       else if (g && g.kind === 'cat') g.done = true;
       else Composite.remove(engine.world, b);
@@ -1623,7 +1628,7 @@ function drawWorld() {
   // balloon strings, drawn behind everything on the platform
   ctx.strokeStyle = 'rgba(80,80,90,0.7)'; ctx.lineWidth = 2;
   for (const f of floats) for (const bl of f.balloons) {
-    if (bl.game.dead) continue;
+    if (bl.game.dead || f.freed) continue;
     const r = bl.game.rope, pb = Vector.add(f.plank.position, Vector.rotate(r.pointB, f.plank.angle));
     ctx.beginPath(); ctx.moveTo(bl.position.x, bl.position.y + 24); ctx.quadraticCurveTo((bl.position.x + pb.x) / 2 + 6, (bl.position.y + pb.y) / 2, pb.x, pb.y); ctx.stroke();
   }

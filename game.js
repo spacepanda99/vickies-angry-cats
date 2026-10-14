@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 61;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 62;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1120,7 +1120,7 @@ function eggTap(p) {
     if (Math.hypot(p.x - b.x, p.y - b.y) < 60) {
       bird.flee = 1; chatterAll('?!');
       [0, 1, 2, 3].forEach(k => sfx.tone('sine', 2400 + k * 160, 3300, 0.05, 0.08, k * 0.07));
-      eggBonus('Chattering at the birdie!', 750, b, 'ek ek ek ek');
+      eggBonus('Ek ek ek ek!', 750, b);
       return true;
     }
   }

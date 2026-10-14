@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 59;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 60;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -745,10 +745,10 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
   portals = lv.portals.map(q => ({ ...q, flap: 0 }));
-  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 420, text: LEVELS[i].intro, life: 200, big: true });
-  if (portals.length) popups.push({ x: fortCenter, y: 330, text: 'Magic cat flaps: in one, out the other!', life: 160, big: true });
+  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 590, text: LEVELS[i].intro, life: 200, tip: true });
+  if (portals.length) popups.push({ x: fortCenter, y: LEVELS[i].intro ? 500 : 590, text: 'Magic cat flaps: in one, out the other!', life: 200, tip: true });
   bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
-  if (bubbles.length) popups.push({ x: fortCenter, y: 330, text: 'Zero gravity inside the bubbles!', life: 150, big: true });
+  if (bubbles.length) popups.push({ x: fortCenter, y: 590, text: 'Zero gravity inside the bubbles!', life: 200, tip: true });
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
   reveal = null; shotRevealed = false;
@@ -1115,7 +1115,7 @@ function step() {
     else if (p.type !== 'ring' && p.type !== 'kitten') p.vy += 0.35;
   }
   particles = particles.filter(p => p.life > 0);
-  for (const p of popups) { p.life--; p.y -= 0.8; }
+  for (const p of popups) { p.life--; if (!p.tip) p.y -= 0.8; }   // level tips stay put
   if (state === 'play') {
     for (const c of chatter) {
       if (c.t > 0) { if (--c.t === 0) sfx.cat(pick(CAT_SOUNDS.chatter[c.type]), 0.5); }
@@ -2753,7 +2753,14 @@ function drawWorld() {
   ctx.globalAlpha = 1;
   for (const p of popups) {
     ctx.globalAlpha = Math.min(1, p.life / 25);
-    if (p.egg) text(p.text, p.x, p.y, 46, '#ffe14d', { font: "'Luckiest Guy', " + FONT, weight: 400, stroke: '#e8578f', strokeW: 8 });
+    if (p.tip) {
+      // a level tip: big, on a dark pill, parked near the middle of the screen so it can be read
+      ctx.font = `700 40px ${FONT}`;
+      const tw = ctx.measureText(p.text).width + 70;
+      ctx.fillStyle = 'rgba(24,14,48,0.85)'; rr(p.x - tw / 2, p.y - 40, tw, 80, 40); ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
+      text(p.text, p.x, p.y + 2, 40, '#ffe14d', { stroke: '#120a26', strokeW: 8 });
+    } else if (p.egg) text(p.text, p.x, p.y, 46, '#ffe14d', { font: "'Luckiest Guy', " + FONT, weight: 400, stroke: '#e8578f', strokeW: 8 });
     else text(p.text, p.x, p.y, p.big ? 28 : 20, p.big ? '#ffd84a' : '#ffffff', { stroke: '#3a2160', strokeW: 5 });
   }
   ctx.globalAlpha = 1;

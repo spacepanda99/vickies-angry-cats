@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 45;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 46;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -444,8 +444,24 @@ const sfx = {
 // the music on both sides of the seam, and a short crossfade is baked into the file just before loopEnd.
 const MUSIC = {
   menu: { url: 'music-menu.ogg', loopStart: 17.1726, loopEnd: 52.0824 },
-  game: { url: 'music-game.ogg', loopStart: 36.3431, loopEnd: 116.3784 },
+  game: { url: 'music-game.ogg', loopStart: 36.3431, loopEnd: 116.3784 },       // level 1
+  // levels 2-14: generated per level (same prompt, each with its own flavour); loop points found by matching the sound either side of the seam
+  lv2: { url: 'music-lv2.ogg', loopStart: 24.8852, loopEnd: 104.1492 },
+  lv3: { url: 'music-lv3.ogg', loopStart: 17.3886, loopEnd: 104.649 },
+  lv4: { url: 'music-lv4.ogg', loopStart: 35.1805, loopEnd: 96.2528 },
+  lv5: { url: 'music-lv5.ogg', loopStart: 25.8847, loopEnd: 95.703 },
+  lv6: { url: 'music-lv6.ogg', loopStart: 32.1819, loopEnd: 102.0002 },
+  lv7: { url: 'music-lv7.ogg', loopStart: 39.1787, loopEnd: 108.3473 },
+  lv8: { url: 'music-lv8.ogg', loopStart: 41.9774, loopEnd: 120.5418 },
+  lv9: { url: 'music-lv9.ogg', loopStart: 26.5344, loopEnd: 87.6067 },
+  lv10: { url: 'music-lv10.ogg', loopStart: 6.0437, loopEnd: 148.0293 },
+  lv11: { url: 'music-lv11.ogg', loopStart: 4.3445, loopEnd: 108.997 },
+  lv12: { url: 'music-lv12.ogg', loopStart: 27.0342, loopEnd: 88.1065 },
+  lv13: { url: 'music-lv13.ogg', loopStart: 43.8266, loopEnd: 96.2028 },
+  lv14: { url: 'music-lv14.ogg', loopStart: 36.6798, loopEnd: 115.3441 },
 };
+// Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.
+const levelTrack = () => levelIdx === 0 ? 'game' : 'lv' + (levelIdx + 1);
 const AUDIO_KEY = 'vickiesAngryCats.audio';
 const music = {
   on: true, volume: 0.35, gain: null, buffers: {}, loading: {}, current: null,
@@ -466,9 +482,9 @@ const music = {
   update() {
     if (!sfx.ac) return;
     this.ensure();
-    const want = state === 'menu' || state === 'levels' ? 'menu' : 'game';
+    const want = state === 'menu' || state === 'levels' ? 'menu' : levelTrack();
     this.load(want);
-    if (this.buffers[want]) this.load(want === 'menu' ? 'game' : 'menu');
+    if (this.buffers[want]) this.load(want === 'menu' ? levelTrack() : 'menu');
     if ((this.current && this.current.name === want) || !this.buffers[want]) return;
     const t = sfx.ac.currentTime;
     if (this.current) { const old = this.current; old.g.gain.setTargetAtTime(0, t, 0.25); old.src.stop(t + 1.5); }
@@ -2476,7 +2492,7 @@ function menuLoot(type, x, y, a, s) {
 // the whole gang huddled off to the side, plotting over the boss's plan
 function drawHuddle() {
   const cx = 1380, w = k => Math.sin(frame * 0.07 + k);
-  const coon = (x, y, r, tilt, k, boss) => drawCoon(x, y - Math.max(0, w(k)) * 4, r, tilt + w(k) * 0.05, { hp: 30, maxHp: 30, blink: k * 53, boss, act: boss ? 'fish' : COON_ACTS[k % 4] });
+  const coon = (x, y, r, tilt, k, boss) => drawCoon(x, y - Math.max(0, w(k)) * 4, r, tilt + w(k) * 0.05, { hp: 30, maxHp: 30, blink: k * 53, boss });
   coon(cx - 122, 682, 46, 0.32, 1);
   coon(cx + 122, 682, 46, -0.32, 2);
   coon(cx, 612, 56, 0, 0, true);

@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 55;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 56;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -43,6 +43,7 @@ const MATS = {
   robovac: { density: 0.01, health: 220, fill: '#3b3f4a', edge: '#1d2027', points: 3000 },            // level 14: the hijacked robot vacuum
   basket:   { fill: '#c8925a', edge: '#7a5230', points: 0 },                                          // level 14: hanging basket (unbreakable)
   cucumber: { density: 0.0012, fill: '#5aa846', edge: '#2f6b28', points: 0 },                         // Easter egg: cats vs cucumbers (unbreakable)
+  lamp:     { fill: '#3b3a52', edge: '#1d1c2b', points: 0 },                                          // level 16: a lamp a cat can switch on (fixed)
 };
 
 const CATS = {
@@ -121,6 +122,11 @@ function robovac(lv, x0, x1) { lv.vacs.push({ x0, x1 }); }
 // a raccoon in a basket swinging from a hook in the ceiling. A cat that flies through the rope claws it
 // in two and the basket drops.
 function swingBasket(lv, ax, ay, len) { lv.swings.push({ x: ax, y: ay, len }); }
+// Level 16 (night): a lamp a cat switches on by touching it. The raccoons wear night-vision goggles and shrug off
+// nearly everything in the dark; a lit lamp blinds the goggles of every raccoon near it (so does a catnip blast).
+// A tall floor lamp, or a short table lamp (give h) on a shelf.
+const LAMP_R = 340;
+function lamp(lv, x, base, h = 120) { lv.blocks.push({ mat: 'lamp', x, y: base - h / 2, w: 34, h, fixed: true }); }
 // Level 15 (night): lookout() puts a raccoon with a sweeping flashlight on top of the fort.
 function lookout(lv, x, base) { lv.raccoons.push({ x, y: base - 37, r: 36, flashlight: true }); }
 // a pair of magic cat flaps (Angry Birds Seasons' portals): whatever goes in one comes out the other,
@@ -265,7 +271,7 @@ const LEVELS = [
   // Night. The cats wait in the soft glow of a night light; the raccoons' fort is in the dark kitchen,
   // just faint outlines. A raccoon at the fridge flings the door open for a moment when the camera first
   // pans over, and again after every shot: memorise the fort, then see what your shot did.
-  { name: 'Midnight Snack', cats: ['baby', 'cleo', 'cece'], night: true, intro: 'Watch closely when the fridge opens!', build(lv) {
+  { name: 'Midnight Snack', cats: ['baby', 'cleo', 'cece'], night: true, fridge: true, intro: 'Watch closely when the fridge opens!', build(lv) {
     const t1 = hut(lv, 1080, GROUND, 140, 120, 'stone', 'wood'); coon(lv, 1080, GROUND);
     const t2 = hut(lv, 1080, t1, 120, 100, 'wood', 'glass'); coon(lv, 1080, t1);
     coon(lv, 1080, t2);
@@ -274,6 +280,18 @@ const LEVELS = [
     const t4 = hut(lv, 1390, t3, 120, 90, 'glass', 'wood'); loot(lv, 1390, t3, 'fish');
     catnip(lv, 1360, t4); mug(lv, 1425, t4);
     loot(lv, KITCHEN.fridge.x + 85 - FORT_X, KITCHEN.fridge.top, 'goldfish');   // on top of the fridge: only seen when it opens
+  } },
+  // Lights Out: the last night level. Combines the cat flaps, balloons and catnip with lighting. The raccoons wear
+  // night-vision goggles, so in the dark they barely feel a hit. Touch a lamp with a cat and every raccoon near it is
+  // blinded. The floor lamp can be lobbed at; the table lamp sits high on a shelf, and the flap is the way up there.
+  { name: 'Lights Out', cats: ['baby', 'cece', 'cleo'], night: true, goggles: true, intro: 'Switch on the lamps to blind their goggles!', build(lv) {
+    portal(lv, 600, 742, 1060, 320);
+    lamp(lv, 800, GROUND);
+    const t1 = hut(lv, 940, GROUND, 130, 110, 'wood', 'wood'); coon(lv, 940, GROUND); coon(lv, 940, t1);
+    const sb = shelf(lv, 1260, 400, 100); lamp(lv, 1270, sb, 80);
+    floatie(lv, 1380, 540);
+    const t2 = hut(lv, 1130, GROUND, 130, 110, 'wood', 'glass'); coon(lv, 1130, GROUND); loot(lv, 1130, t2, 'fish');
+    const g = shelf(lv, 1200, 330, 70); loot(lv, 1200, g, 'goldfish');     // the secret: a perfect CeCe roll through the flap
   } },
 ];
 
@@ -490,6 +508,7 @@ const MUSIC = {
   lv13: { url: 'music-lv13.ogg', loopStart: 43.8266, loopEnd: 96.2028 },
   lv14: { url: 'music-lv14.ogg', loopStart: 36.6798, loopEnd: 115.3441 },
   lv15: { url: 'music-lv15.ogg', loopStart: 20.1873, loopEnd: 107.4477 },        // cool late-night vibe
+  lv16: { url: 'music-lv16.ogg', loopStart: 43.6267, loopEnd: 96.0029 },         // stealthy lamp-lit night heist
 };
 // Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.
 const levelTrack = () => MUSIC['lv' + (levelIdx + 1)] && levelIdx > 0 ? 'lv' + (levelIdx + 1) : 'game';
@@ -604,7 +623,7 @@ const EGG_LEN = 140;
 
 let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
-const SNAP_DELAY = 40;              // about 2/3 of a second of shaking and creaking before it breaks
+const SNAP_DELAY = 20;              // a third of a second of shaking and creaking before it breaks
 const BANNER_IN = 12, BANNER_HOLD = 52, BANNER_OUT = 12, BANNER_LEN = BANNER_IN + BANNER_HOLD + BANNER_OUT;
 
 function newEngine() {
@@ -715,6 +734,7 @@ function loadLevel(i) {
   floats = lv.floats.map(makeFloat);
   vacs = lv.vacs.map(makeVac); swings = lv.swings.map(makeSwing);
   for (const f of floats) Composite.add(engine.world, [f.plank, f.coon, ...f.balloons, ...f.balloons.map(b => b.game.rope)]);
+  if (LEVELS[i].goggles) for (const b of bodies()) if (b.game && b.game.kind === 'coon') b.game.goggles = true;   // night-vision goggles on every raccoon
   const xs = [...lv.raccoons, ...lv.floats, ...lv.swings, ...lv.vacs.map(v => ({ x: (v.x0 + v.x1) / 2 }))].map(c => c.x);
   fortCenter = xs.reduce((s, x) => s + x, 0) / xs.length;
   queue = LEVELS[i].cats.slice();
@@ -732,8 +752,8 @@ function loadLevel(i) {
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
   reveal = null; shotRevealed = false;
-  if (LEVELS[i].night) { introTimer = 150; startReveal(35); }   // the camera lingers on the dark fort while the fridge opens
-  scheduleChatter([current, ...queue], LEVELS[i].night ? 140 : 70);   // plotting while the camera glides back from the fort
+  if (LEVELS[i].fridge) { introTimer = 150; startReveal(35); }   // the camera lingers on the dark fort while the fridge opens
+  scheduleChatter([current, ...queue], LEVELS[i].fridge ? 140 : 70);   // plotting while the camera glides back from the fort
   upBanner = { type: current, t: -(70 + (queue.length + 1) * 16 + 16) };   // then whose turn it is
   cam.x = clampCamX(fortCenter - viewW / 2); cam.y = CAM_TOP;
   state = 'play';
@@ -743,10 +763,38 @@ function loadLevel(i) {
 
 function massFactor(o) { return o.isStatic ? 2.5 : Math.max(0.4, Math.min(3, o.mass / 4)); }
 
+// raccoons in night-vision goggles take about a tenth of the damage until a lamp or a flash blinds them
+const gogglesK = t => t.game && t.game.goggles && !t.game.blind ? 0.12 : 1;
+function blindCoon(b) {
+  const g = b.game;
+  if (!g || g.blind || g.dead) return;
+  g.blind = true; g.blindT = 80;
+  popups.push({ x: b.position.x, y: b.position.y - g.r - 30, text: 'Blinded!', life: 60 });
+  sparkle(b.position, 6);
+}
+function switchLamp(b) {
+  const g = b.game;
+  if (g.on) return;
+  g.on = true; g.onT = 0;
+  popups.push({ x: b.position.x, y: b.position.y - g.h / 2 - 40, text: 'Lights on!', life: 70, big: true });
+  sparkle({ x: b.position.x, y: b.position.y - g.h / 2 }, 10);
+  sfx.tone('square', 900, 1400, 0.06, 0.1); sfx.thud(0.4);
+}
+function updateLamps() {
+  const on = bodies().filter(b => b.game && b.game.mat === 'lamp' && b.game.on);
+  for (const l of on) l.game.onT++;
+  if (!LEVELS[levelIdx].goggles) return;
+  for (const b of bodies()) {
+    const g = b.game;
+    if (!g || g.kind !== 'coon' || !g.goggles) continue;
+    if (g.blindT > 0) g.blindT--;
+    if (!g.blind && on.some(l => Vector.magnitude(Vector.sub(l.position, b.position)) < LAMP_R)) blindCoon(b);
+  }
+}
 function hurt(t, o, rel) {
   const g = t.game;
   if (!g || g.dead || g.hp === undefined) return;
-  let d = (rel - 2) * 7 * massFactor(o);
+  let d = (rel - 2) * 7 * massFactor(o) * gogglesK(t);
   if (o.game && o.game.kind === 'cat') d *= o.game.mult;
   g.hp -= d;
   if (g.hp <= 0) kill(t);
@@ -761,6 +809,7 @@ function onCollide(ev) {
     for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon') && !o.fixed && !o.poly) c.bump = true;   // shelves and slides don't soak it up
     if (gb && gb.prancing) gb.landed = true;
     if (ga && gb) {
+      if (ga.kind === 'cat' && gb.mat === 'lamp') switchLamp(b); else if (gb.kind === 'cat' && ga.mat === 'lamp') switchLamp(a);
       if (ga.kind === 'cat' && gb.kind === 'loot') { gb.collected = true; kill(b); }
       else if (gb.kind === 'cat' && ga.kind === 'loot') { ga.collected = true; kill(a); }
       if (!cucumberScare && settle === 0) {
@@ -859,7 +908,8 @@ function usePower() {
       if (b === c || b.isStatic || !b.game || b.game.kind === 'cat' || b.game.dead || b.game.hp === undefined) continue;
       const size = b.game.r || Math.max(b.game.w || 0, b.game.h || 0) / 2 || 20;
       const touching = Matter.Query.collides(c, [b]).length > 0 || Vector.magnitude(Vector.sub(b.position, c.position)) < g.r + size * 0.6 + 8;
-      if (touching) { b.game.hp = 0; kill(b); sparkle(b.position, 5); }
+      if (touching && gogglesK(b) < 1) { b.game.hp -= 18; sparkle(b.position, 3); if (b.game.hp <= 0) kill(b); }   // goggles shrug off the instant wreck
+      else if (touching) { b.game.hp = 0; kill(b); sparkle(b.position, 5); }
     }
     const R = 260;
     for (const b of bodies()) {
@@ -870,7 +920,7 @@ function usePower() {
       Sleeping.set(b, false);
       Body.setVelocity(b, Vector.add(b.velocity, Vector.mult(Vector.normalise(d), 3 + 11 * f)));
       Body.setAngularVelocity(b, b.angularVelocity + (Math.random() - 0.5) * 0.3 * f);
-      if (b.game.hp !== undefined) { b.game.hp -= 45 * f; if (b.game.hp <= 0) kill(b); }
+      if (b.game.hp !== undefined) { b.game.hp -= 45 * f * gogglesK(b); if (b.game.hp <= 0) kill(b); }
     }
     particles.push({ type: 'ring', x: c.position.x, y: c.position.y, vx: 0, vy: 0, s: R, life: 24, max: 24 });
     for (let i = 0; i < 26; i++) {
@@ -903,6 +953,7 @@ function blast(center, R, push, dmg) {
 }
 function catnipBoom(pos) {
   blast(pos, 230, 14, 80);
+  for (const b of bodies()) if (b.game && b.game.goggles && Vector.magnitude(Vector.sub(b.position, pos)) < 260) blindCoon(b);   // the flash blinds their goggles
   particles.push({ type: 'ring', x: pos.x, y: pos.y, vx: 0, vy: 0, s: 230, life: 22, max: 22 });
   for (let i = 0; i < 18; i++) particles.push({ type: 'puff', x: pos.x + rand(-20, 20), y: pos.y + rand(-20, 20),
     vx: rand(-4, 4), vy: rand(-5, 1), s: rand(14, 30), life: 45, max: 45, color: i % 3 ? '#9be08a' : '#e9ffd9' });
@@ -1106,6 +1157,7 @@ function step() {
   }
   updateMachines();
   updatePortals();
+  updateLamps();
   updateLaser();
   if (frame % 6 === 0) for (const b of bodies()) {
     const g = b.game;
@@ -1206,7 +1258,7 @@ function updatePhase() {
       if (g.rest > 50 || flyTimer > 60 * 10) g.done = true; else allDone = false;
     }
     // at night, hold on the fort while the fridge opens and shows what the shot did
-    if (allDone && isNight() && !shotRevealed) { shotRevealed = true; startReveal(10); return; }
+    if (allDone && hasFridge() && !shotRevealed) { shotRevealed = true; startReveal(10); return; }
     if (allDone && reveal) return;
     if (allDone) {
       for (const c of flying) { if (c.position.y < H + 200 && !c.game.boxed) poof(c.position, 6, c.game.r / 26); Composite.remove(engine.world, c); }
@@ -1907,7 +1959,7 @@ function drawCoon(x, y, r, ang, g) {
   ctx.fillRect(-r * 0.2, -r * 0.14, r * 0.4, r * 0.16);
   // shifty eyes, looking toward the slingshot
   const hurtBad = g && g.hp < g.maxHp * 0.5;
-  const blink = g && (frame + g.blink) % 220 < 7;
+  const blink = g && ((frame + g.blink) % 220 < 7 || g.blindT > 0);
   for (const s of [-1, 1]) {
     const ex = s * r * 0.34, ey = -r * 0.05;
     if (blink) { ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.06; ctx.beginPath(); ctx.moveTo(ex - r * 0.12, ey); ctx.lineTo(ex + r * 0.12, ey); ctx.stroke(); continue; }
@@ -1919,6 +1971,15 @@ function drawCoon(x, y, r, ang, g) {
     ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex, ey, r * 0.13, 0, 7); ctx.fill();
     const look = g && g.act === 'yarn' ? Math.sin((frame + g.blink) * 0.06) * r * 0.05 : -r * 0.05;
     ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex + look, ey + r * 0.01, r * 0.07, 0, 7); ctx.fill();
+  }
+  if (g && g.goggles && !g.blind) {
+    // night-vision goggles: two dark green lenses over the eyes, joined by a bridge
+    ctx.fillStyle = '#26332a'; ctx.fillRect(-r * 0.2, -r * 0.1, r * 0.4, r * 0.07);
+    for (const sg of [-1, 1]) {
+      ctx.fillStyle = '#16251b'; ctx.beginPath(); ctx.arc(sg * r * 0.34, -r * 0.05, r * 0.22, 0, 7); ctx.fill();
+      ctx.lineWidth = r * 0.06; ctx.strokeStyle = '#59c878'; ctx.stroke();
+      ctx.fillStyle = '#7dffa0'; ctx.beginPath(); ctx.arc(sg * r * 0.34, -r * 0.05, r * 0.1, 0, 7); ctx.fill();
+    }
   }
   // nose + smirk
   ctx.fillStyle = '#16171b'; ctx.beginPath(); ctx.ellipse(0, r * 0.22, r * 0.13, r * 0.09, 0, 0, 7); ctx.fill();
@@ -2009,6 +2070,15 @@ function drawBlock(b) {
     ctx.restore();
     ctx.lineWidth = 3; ctx.strokeStyle = m.edge; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(r * 0.7, r * 0.7); ctx.quadraticCurveTo(r * 1.3, r * 0.8, r * 1.1, r * 1.3); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  if (g.mat === 'lamp') {
+    const k = g.on ? Math.min(1, (g.onT + 1) / 20) : 0;
+    ctx.fillStyle = m.edge; ctx.fillRect(-3, -h / 2 + 22, 6, h - 22); rr(-w / 2 + 2, h / 2 - 9, w - 4, 9, 3); ctx.fill();
+    ctx.fillStyle = `rgb(${Math.round(110 + 145 * k)},${Math.round(104 + 121 * k)},${Math.round(128 - 38 * k)})`;
+    ctx.beginPath(); ctx.moveTo(-w / 2 - 2, -h / 2 + 26); ctx.lineTo(-w / 2 + 7, -h / 2); ctx.lineTo(w / 2 - 7, -h / 2); ctx.lineTo(w / 2 + 2, -h / 2 + 26); ctx.closePath(); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = m.edge; ctx.stroke();
     ctx.restore();
     return;
   }
@@ -2244,6 +2314,7 @@ const FAIRY = ['#ff6b6b', '#ffd93d', '#6bcbff', '#c49bff', '#7dff9a'];
 const WINDOWS = [230, 1060].map(wx => ({ wx, wy: 110, ww: 420, wh: 400 }));
 let nightCanvas = null;
 const isNight = () => LEVELS[levelIdx] && LEVELS[levelIdx].night;
+const hasFridge = () => LEVELS[levelIdx] && LEVELS[levelIdx].fridge;
 // window glass at night: deep blue sky, the moon, twinkling stars, a dark garden and a few fireflies
 function nightWindows() {
   for (const [i, w] of WINDOWS.entries()) {
@@ -2426,6 +2497,16 @@ function nightLights() {
     L.push({ kind: 'rect', x: F.x, y: F.top + 120, w: F.w, h: GROUND - F.top - 120, cut: 0.97 * fk, glow: 0 });
     L.push({ kind: 'round', x: F.x + 20, y: GROUND - 200, r: 950, rgb: '200,235,255', cut: 0.93 * fk, glow: 0.16 * fk });
   }
+  // lamps: dim bulb glow until switched on, then a big warm pool of light
+  for (const b of bodies()) {
+    const g = b.game;
+    if (!g || g.mat !== 'lamp') continue;
+    const x = b.position.x, y = b.position.y - g.h / 2 + 12, k = g.on ? Math.min(1, (g.onT + 1) / 20) : 0;
+    if (k > 0) {
+      L.push({ kind: 'round', x, y, r: 420 * k, rgb: '255,225,160', cut: 0.98 * k, glow: 0.2 * k });
+      L.push({ kind: 'pool', x, y: GROUND + 4, rx: 300 * k, ry: 26, rgb: '255,225,160', cut: 0.5 * k, glow: 0.2 * k });
+    } else L.push({ kind: 'round', x, y, r: 80, rgb: '255,225,160', cut: 0.3, glow: 0.12 + 0.07 * Math.sin(frame * 0.08) });
+  }
   // a lookout's flashlight cone (if any)
   for (const b of lookouts()) {
     const a = flashAngle(b.game), r = b.game.r, ox = b.position.x + Math.cos(a) * r * 1.15, oy = b.position.y + Math.sin(a) * r * 1.15;
@@ -2458,6 +2539,12 @@ function drawNight() {
   n.setTransform(1, 0, 0, 1, 0, 0); n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, W, H);
   n.fillStyle = 'rgba(6,8,30,0.93)'; n.fillRect(0, 0, W, H);
   n.setTransform(ctx.getTransform());
+  if (hasFridge() && revealK() < 1) {
+    // with the fridge shut the kitchen is nearly pitch black: only the eyeshine and the flashes give anything away
+    const gr = n.createLinearGradient(KITCHEN.x - 200, 0, KITCHEN.x + 60, 0);
+    gr.addColorStop(0, 'rgba(2,3,12,0)'); gr.addColorStop(1, `rgba(2,3,12,${0.88 * (1 - revealK())})`);
+    n.fillStyle = gr; n.fillRect(KITCHEN.x - 200, -800, WORLD_W + 600, 2000);
+  }
   n.globalCompositeOperation = 'destination-out';
   for (const l of lights) paintLight(n, l, l.cut, '0,0,0');
   ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(nightCanvas, 0, 0); ctx.restore();
@@ -2472,6 +2559,13 @@ function drawNight() {
   for (const c of flying) if (!c.game.done) add(c.position.x, c.position.y, c.game.r, c.game.type);
   for (const [x, y, r] of eyes) softLight(ctx, x, y, r * 0.22, '200,255,150', 0.55);
   for (const b of fairyBulbs()) softLight(ctx, b.x, b.y + 3, 9, hexRgb(b.c), b.a);
+  // night-vision goggles glow green in the dark: that's how you spot a raccoon nobody has lit up
+  for (const b of bodies()) {
+    const g = b.game;
+    if (!g || g.kind !== 'coon' || !g.goggles || g.blind || g.dead) continue;
+    const c = Math.cos(b.angle), sn = Math.sin(b.angle);
+    for (const sg of [-1, 1]) { const px = sg * g.r * 0.34, py = -g.r * 0.05; softLight(ctx, b.position.x + px * c - py * sn, b.position.y + px * sn + py * c, g.r * 0.5, '90,255,130', 0.7); }
+  }
   for (const l of NIGHT_LIGHTS) softLight(ctx, l.x, l.y - 16, 30, l.rgb, 0.45 * nlPulse(l));
   ctx.restore();
 }

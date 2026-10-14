@@ -2,7 +2,7 @@
 // Saves the FULL raw response (CLAUDE.md: archive raw results of paid calls) plus the audio file. Never prints the key.
 import fs from 'node:fs';
 import path from 'node:path';
-const dir = path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1'));
+const dir = path.dirname(decodeURIComponent(new URL(import.meta.url).pathname).replace(/^\/([A-Z]:)/, '$1'));
 const out = path.join(dir, 'music'); fs.mkdirSync(out, { recursive: true });
 const key = fs.readFileSync('C:/Mikes Stuff/Gemini api.txt', 'utf8').split(/\r?\n/).map(s => s.trim()).find(s => /^AQ\./.test(s));
 
@@ -22,6 +22,7 @@ const FLAVOUR = {
   12: 'Level flavour: zero gravity zoomies. A spacey retro theremin and bubbly synth arpeggios mixed with the pizzicato and marimba, floaty and fun.',
   13: 'Level flavour: magic cat flaps. Shimmering harp glissandos, celesta sparkles and a mysterious-but-playful clarinet, a feeling of magic portals.',
   15: 'Level flavour: a cool late-night vibe, the house asleep at midnight. Mellow and smooth: soft vibraphone and celesta, a walking upright bass, brushed drums, a sly muted-trumpet or clarinet melody tiptoeing in the moonlight, still playful.',
+  16: 'Level flavour: lights out, a stealthy heist in the dark with the lamps flicking on one by one. Hushed and sneaky: plucked pizzicato and a soft fingerstyle bass tiptoeing, a glassy celesta and music-box twinkle for each lamp switching on, low muted brass and a sly bass clarinet melody, a slow shimmering moonlit pad, sparse brushed drums with finger snaps. Night-time, a touch mysterious, still playful.',
   14: 'Level flavour: robo-vac rodeo. A cartoon western: twangy guitar, a galloping brushed-drum rhythm, whirring robotic bleeps, a rodeo-showdown fanfare feel.',
 };
 const level = +process.argv[2], model = process.argv[3] || 'lyria-3.5';

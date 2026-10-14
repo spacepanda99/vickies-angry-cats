@@ -111,7 +111,8 @@ function buildFar(tod = 0) {
   // framed portraits of the family's own cats, hung on the clear wall between the windows (which ones depends on the level)
   const hz = parseInt(keyed(TOD.haze, tod).slice(1), 16);
   haze(L, `rgba(${hz >> 16},${(hz >> 8) & 255},${hz & 255},0.35)`);
-  PORTRAITS_NOW.slice(0, 2).forEach((kind, i) => paintPortrait(g, 727 + i * 132, 430, 128, 160, kind));   // mid-wall, clear of the hint pill and the sofa
+  const pn = PORTRAITS_NOW.slice(0, 2);   // a lone portrait is centred in the gap between the curtains (x 720-990); a pair sits side by side
+  pn.forEach((kind, i) => paintPortrait(g, 855 - (pn.length * 128 + (pn.length - 1) * 4) / 2 + i * 132, 440, 128, 160, kind));   // mid-wall, clear of the hint pill and the sofa
   return L;
 }
 

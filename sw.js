@@ -1,6 +1,6 @@
 // Offline support once installed. Online, always fetch fresh files (no stale copies);
 // the cache is only the fallback for when the phone has no connection.
-const CACHE = 'angry-cats-v27';
+const CACHE = 'angry-cats-v28';
 const FILES = ['./', './index.html', './backdrop.js', './game.js', './matter.min.js', './manifest.json', './icon-192.png', './icon-512.png', './music-menu.ogg', './music-game.ogg', './jingle-win.ogg', './jingle-lose.ogg'];
 
 self.addEventListener('install', e => {

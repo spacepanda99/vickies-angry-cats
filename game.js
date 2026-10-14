@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 27;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 28;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -215,10 +215,13 @@ const sfx = {
   crashBus: null,
   bus() {
     if (!this.crashBus) {
+      const shaper = this.ac.createWaveShaper(), curve = new Float32Array(1024);
+      for (let i = 0; i < 1024; i++) { const x = i / 511.5 - 1; curve[i] = Math.tanh(2.2 * x); }   // gentle grit
+      shaper.curve = curve;
       const comp = this.ac.createDynamicsCompressor();
-      comp.threshold.value = -14; comp.knee.value = 6; comp.ratio.value = 8; comp.attack.value = 0.002; comp.release.value = 0.15;
-      this.crashBus = this.ac.createGain(); this.crashBus.gain.value = 3.2;
-      this.crashBus.connect(comp); comp.connect(this.ac.destination);
+      comp.threshold.value = -12; comp.knee.value = 6; comp.ratio.value = 6; comp.attack.value = 0.002; comp.release.value = 0.2;
+      this.crashBus = this.ac.createGain(); this.crashBus.gain.value = 2.2;
+      this.crashBus.connect(shaper); shaper.connect(comp); comp.connect(this.ac.destination);
     }
     return this.crashBus;
   },
@@ -256,36 +259,60 @@ const sfx = {
     o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(f1, t + dur);
     o.connect(this.env(t, dur, vol, this.bus(), 0.003)); o.start(t); o.stop(t + dur + 0.05);
   },
-  lastBreak: 0,
-  // something just broke: the sound depends on what it was made of
+  // a shower of short noise grains: debris falling over the next moments (more at the start)
+  grains(n, span, fLo, fHi, dLo, dHi, vol, q = 1.2) {
+    const r = Math.random;
+    for (let i = 0; i < n; i++) {
+      const delay = Math.pow(r(), 1.8) * span;
+      this.burst(delay, dLo + r() * (dHi - dLo), 'bandpass', fLo + r() * (fHi - fLo), q, vol * (1 - 0.6 * delay / span));
+    }
+  },
+  recent: [],
+  // something just broke: a crash in the sound of what it was made of. Breaks close together pile up
+  // into a bigger collapse, but each extra one is lighter so a falling tower doesn't overload the phone.
   crumble(mat) {
     if (!this.ok()) return;
     const now = this.ac.currentTime;
-    if (now - this.lastBreak < 0.035) return;          // a collapsing tower stays a crash, not a wall of noise
-    this.lastBreak = now;
+    this.recent = this.recent.filter(t => now - t < 0.3); this.recent.push(now);
+    const busy = this.recent.length, k = busy > 6 ? 0 : busy > 3 ? 0.5 : 1;
+    if (!k) return;
     const r = Math.random;
     if (mat === 'glass') {
-      this.burst(0, 0.32, 'highpass', 2200, 0.5, 0.5);                              // shatter
-      for (let i = 0; i < 7; i++) this.ping('sine', 2400 + r() * 3200, 2200 + r() * 2600, 0.08 + r() * 0.16, 0.16, r() * 0.28);   // tinkling shards
+      this.burst(0, 0.35, 'highpass', 1800, 0.5, 0.8);                               // shatter
+      this.grains(Math.round(12 * k), 0.45, 3000, 7000, 0.02, 0.05, 0.35, 2);         // sparkly bits
+      for (let i = 0; i < 8 * k; i++) this.ping('sine', 2400 + r() * 3200, 2200 + r() * 2600, 0.08 + r() * 0.18, 0.18, r() * 0.3);   // tinkles
     } else if (mat === 'stone') {
-      this.burst(0, 0.55, 'lowpass', 520, 0.6, 0.9);                                // heavy crumble
-      this.ping('sine', 120, 45, 0.3, 0.5);
-      for (let i = 0; i < 8; i++) this.burst(0.04 + r() * 0.4, 0.06, 'bandpass', 700 + r() * 900, 1.5, 0.35);   // gravel
+      this.burst(0, 0.4, 'bandpass', 750, 0.6, 1.0);                                  // the block giving way
+      this.ping('sine', 170, 60, 0.3, 0.7);                                           // thump (the grit makes it audible)
+      this.grains(Math.round(28 * k), 0.95, 500, 2600, 0.03, 0.09, 0.55, 1.1);        // rubble tumbling down
     } else if (mat === 'book' || mat === 'decoy') {
-      this.burst(0, 0.15, 'bandpass', 1500, 0.7, 0.55);                             // papery thwap
-      this.ping('sine', 190, 90, 0.12, 0.35);
-    } else {                                                                        // wood
-      this.burst(0, 0.18, 'bandpass', 1100, 0.9, 0.75);                             // crack
-      this.ping('triangle', 150, 60, 0.16, 0.5);                                    // woody thump
-      for (let i = 0; i < 5; i++) this.burst(0.03 + r() * 0.16, 0.03, 'highpass', 2200, 0.6, 0.35);   // splinters
+      this.burst(0, 0.14, 'bandpass', 1800, 0.7, 0.8);                                // papery thwap
+      this.ping('sine', 320, 140, 0.12, 0.45);
+      this.grains(Math.round(6 * k), 0.25, 1500, 3500, 0.02, 0.05, 0.3);
+    } else {                                                                          // wood
+      this.burst(0, 0.07, 'highpass', 1200, 0.7, 1.0);                                // sharp crack
+      this.burst(0, 0.28, 'bandpass', 850, 0.8, 0.7);                                 // splintering body
+      this.ping('triangle', 230, 90, 0.2, 0.6);                                       // woody thump
+      this.grains(Math.round(16 * k), 0.55, 900, 3600, 0.02, 0.06, 0.45, 1.4);        // splinters and chunks
     }
   },
   // a solid hit that didn't break anything
+  // An impact that didn't break anything. A toppling tower is mostly these, so they need real crunch.
   knock(mat, v) {
     if (!this.ok()) return;
-    if (mat === 'glass') this.ping('sine', 1900 + Math.random() * 900, 1700, 0.1, 0.1 + 0.2 * v);
-    else if (mat === 'stone') { this.burst(0, 0.14, 'lowpass', 380, 0.6, 0.2 + 0.45 * v); this.ping('sine', 95, 55, 0.14, 0.25 * v); }
-    else this.burst(0, 0.1, 'bandpass', 560 + Math.random() * 200, 1.2, 0.15 + 0.45 * v);
+    const r = Math.random;
+    if (mat === 'glass') {
+      this.ping('sine', 2000 + r() * 900, 1800, 0.12, 0.2 + 0.35 * v);
+      this.burst(0, 0.09, 'highpass', 3000, 0.6, 0.15 + 0.3 * v);
+    } else if (mat === 'stone') {
+      this.burst(0, 0.18, 'bandpass', 600 + r() * 300, 0.8, 0.3 + 0.6 * v);
+      this.ping('sine', 150, 60, 0.15, 0.4 * v);
+      if (v > 0.3) this.grains(Math.round(6 * v), 0.3, 600, 2200, 0.02, 0.06, 0.35 * v);
+    } else {
+      this.burst(0, 0.12, 'bandpass', 700 + r() * 400, 1.0, 0.25 + 0.6 * v);
+      this.ping('triangle', 200, 90, 0.1, 0.3 * v);
+      if (v > 0.3) this.grains(Math.round(5 * v), 0.22, 900, 3000, 0.015, 0.04, 0.3 * v);
+    }
   },
   pop() { this.tone('sine', 260, 900, 0.16, 0.2); },
   zoom() { this.tone('square', 300, 1300, 0.25, 0.05); },
@@ -410,8 +437,8 @@ let chatter = [];
 const CHATTER_LIFE = 36, CHATTER_SYMBOLS = ['!', '♥', '?!', '♪', '>:3'];
 function scheduleChatter(lineup, start) {
   chatter = [];
-  lineup.forEach((type, who) => chatter.push({ type, who, t: start + who * 24, life: CHATTER_LIFE, sym: CHATTER_SYMBOLS[(who * 2 + levelIdx) % CHATTER_SYMBOLS.length] }));
-  chatter.push({ type: lineup[0], who: 0, t: start + lineup.length * 24 + 8, life: CHATTER_LIFE, sym: '!' });   // the leader has the last word
+  lineup.forEach((type, who) => chatter.push({ type, who, t: start + who * 16, life: CHATTER_LIFE, sym: CHATTER_SYMBOLS[(who * 2 + levelIdx) % CHATTER_SYMBOLS.length] }));
+  chatter.push({ type: lineup[0], who: 0, t: start + lineup.length * 16 + 4, life: CHATTER_LIFE, sym: '!' });   // the leader has the last word
 }
 function chatterAt(who) { return chatter.find(c => c.who === who && c.t <= 0 && c.life > 0); }
 function chatterHop(who) { const c = chatterAt(who); return c ? Math.sin((1 - c.life / CHATTER_LIFE) * Math.PI) * 16 : 0; }
@@ -426,6 +453,7 @@ function chatterBubble(who, x, y) {
 }
 let menuHop = {};                   // home screen: when each cat was last tapped
 
+let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
 const SNAP_DELAY = 40;              // about 2/3 of a second of shaking and creaking before it breaks
 const BANNER_IN = 12, BANNER_HOLD = 52, BANNER_OUT = 12, BANNER_LEN = BANNER_IN + BANNER_HOLD + BANNER_OUT;
@@ -517,8 +545,8 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
-  scheduleChatter([current, ...queue], 105);   // plotting while the camera glides back from the fort
-  upBanner = { type: current, t: -(105 + (queue.length + 1) * 24 + 40) };   // then whose turn it is
+  scheduleChatter([current, ...queue], 70);   // plotting while the camera glides back from the fort
+  upBanner = { type: current, t: -(70 + (queue.length + 1) * 16 + 16) };   // then whose turn it is
   cam.x = clampCamX(fortCenter - viewW / 2); cam.y = CAM_TOP;
   state = 'play';
 }
@@ -550,11 +578,14 @@ function onCollide(ev) {
     const rel = Vector.magnitude(Vector.sub(a.velocity, b.velocity));
     if (rel < 2) continue;
     hurt(a, b, rel); hurt(b, a, rel);
-    if (rel > 4 && frame - lastThud > 4) {
-      lastThud = frame;
-      // knock in the material of whatever got hit (blocks first, then the floor's dull thud)
-      const hit = ga && ga.kind === 'block' ? ga : gb && gb.kind === 'block' ? gb : null;
-      if (hit && !hit.dead) sfx.knock(hit.mat, Math.min(1, rel / 18)); else sfx.thud(Math.min(1, rel / 18));
+    if (rel > 3) {
+      // every real impact crunches in the material of the block that got hit; a few per frame,
+      // and each block at most every 6 frames, so a falling tower rumbles without turning to noise
+      const v = Math.min(1, (rel - 2) / 14);
+      const hit = ga && ga.kind === 'block' && !ga.dead ? ga : gb && gb.kind === 'block' && !gb.dead ? gb : null;
+      if (hit) {
+        if (knocksThisFrame < 4 && frame - (hit.lastKnock || -99) > 6) { hit.lastKnock = frame; knocksThisFrame++; sfx.knock(hit.mat, v); }
+      } else if (frame - lastThud > 4) { lastThud = frame; sfx.thud(v); }
     }
   }
 }
@@ -713,6 +744,7 @@ function step() {
   Engine.update(engine, STEP);
   if (settle > 0) settle--;
   if (snapTimer > 0) snapTimer--;
+  knocksThisFrame = 0;
   if (state === 'play' && phase === 'aim' && dragging && current === 'cece' && !bandSnapped && Math.hypot(pull.x, pull.y) > SNAP_PULL) {
     if (snapStrain % 9 === 0) sfx.creak();
     if (++snapStrain >= SNAP_DELAY) snapBand();
@@ -869,6 +901,7 @@ canvas.addEventListener('pointerdown', e => {
   try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
   if (phase === 'aim' && current && introTimer === 0 && Math.hypot(p.x - SLING.x - pull.x, p.y - SLING.y - pull.y) < 110) {
     dragging = true;
+    if (upBanner && upBanner.t < 0) upBanner.t = 0;   // never shoot before it says who is up
     updatePull(p);
     return;
   }

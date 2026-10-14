@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 47;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 48;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -41,7 +41,9 @@ const MATS = {
   cage:   { density: 0.0015, health: 30, fill: 'rgba(225,235,250,0.3)', edge: '#7d8594', points: 0 },    // a kitten is locked inside
   mug:    { density: 0.0012, health: 14, fill: '#f7f3ea', edge: '#8f8676', points: 250 },              // Easter egg: swipe it off yourself
   robovac: { density: 0.01, health: 220, fill: '#3b3f4a', edge: '#1d2027', points: 3000 },            // level 14: the hijacked robot vacuum
-  basket:   { fill: '#c8925a', edge: '#7a5230', points: 0 },                                          // level 14: hanging basket (unbreakable)
+  basket:   { fill: '#c8925a', edge: '#7a5230', points: 0 },
+  fridgeshelf: { fill: 'rgba(215,236,250,0.6)', edge: '#8fb3c9', points: 0 },                         // level 15: glass fridge shelves (fixed)
+  fridgetop:   { fill: '#e8eef3', edge: '#9aa6b1', points: 0 },                                          // level 14: hanging basket (unbreakable)
   cucumber: { density: 0.0012, fill: '#5aa846', edge: '#2f6b28', points: 0 },                         // Easter egg: cats vs cucumbers (unbreakable)
 };
 
@@ -121,6 +123,11 @@ function robovac(lv, x0, x1) { lv.vacs.push({ x0, x1 }); }
 // a raccoon in a basket swinging from a hook in the ceiling. A cat that flies through the rope claws it
 // in two and the basket drops.
 function swingBasket(lv, ax, ay, len) { lv.swings.push({ x: ax, y: ay, len }); }
+// Level 15 (night): the open fridge the raccoons are raiding. Its shelves and top are fixed pieces;
+// the body, door and light are drawn around them. lookout() puts a raccoon with a sweeping flashlight on top.
+function fixedPiece(lv, mat, x, y, w, h) { lv.blocks.push({ mat, x, y, w, h, fixed: true }); return y - h / 2; }
+function fridgeAt(lv, x, top, w) { lv.fridge = { x, top, w }; }
+function lookout(lv, x, base) { lv.raccoons.push({ x, y: base - 37, r: 36, flashlight: true }); }
 // a pair of magic cat flaps (Angry Birds Seasons' portals): whatever goes in one comes out the other,
 // same speed, same heading
 const PORTAL_R = 52;
@@ -249,6 +256,22 @@ const LEVELS = [
     const t = hut(lv, 1440, GROUND, 130, 160, 'wood', 'wood'); coon(lv, 1440, GROUND, false, true);
     coon(lv, 1410, t); catnip(lv, 1472, t);
     const g = shelf(lv, 1530, 430, 60); loot(lv, 1530, g, 'goldfish');     // the secret, high on the wall past the dresser
+  } },
+  // Night. The house is dark and the raccoons are raiding the fridge. Lit by the open fridge, moonlight
+  // through the windows, a lookout's sweeping flashlight, fairy lights and the cats' night light.
+  // (Lighting after Ori: many sources in harmony; after Limbo: light tells you where to look.)
+  { name: 'Midnight Snack', cats: ['baby', 'cleo', 'cece'], night: true, intro: 'Shh! Midnight fridge raid...', build(lv) {
+    fridgeAt(lv, 1260, 470, 210);
+    fixedPiece(lv, 'fridgetop', 1365, 480, 214, 20);                        // top of the fridge
+    const s1 = fixedPiece(lv, 'fridgeshelf', 1365, 596, 196, 10);
+    const s2 = fixedPiece(lv, 'fridgeshelf', 1365, 706, 196, 10);
+    coon(lv, 1315, s1); loot(lv, 1425, s1, 'fish');
+    coon(lv, 1365, s2, false, true);
+    block(lv, 'glass', 1295, GROUND - 22, 34, 44); block(lv, 'glass', 1435, GROUND - 22, 34, 44); loot(lv, 1365, GROUND, 'yarn');
+    lookout(lv, 1320, 470); catnip(lv, 1430, 470);                          // the lookout, up top with his flashlight
+    const t = hut(lv, 1010, GROUND, 170, 120, 'wood', 'wood'); coon(lv, 1010, GROUND);   // the kitchen island
+    block(lv, 'glass', 960, t - 25, 30, 50); mug(lv, 1060, t);
+    const g = shelf(lv, 880, 390, 60); loot(lv, 880, g, 'goldfish');       // hidden in the dark: watch the flashlight
   } },
 ];
 
@@ -461,7 +484,7 @@ const MUSIC = {
   lv14: { url: 'music-lv14.ogg', loopStart: 36.6798, loopEnd: 115.3441 },
 };
 // Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.
-const levelTrack = () => levelIdx === 0 ? 'game' : 'lv' + (levelIdx + 1);
+const levelTrack = () => MUSIC['lv' + (levelIdx + 1)] && levelIdx > 0 ? 'lv' + (levelIdx + 1) : 'game';
 const AUDIO_KEY = 'vickiesAngryCats.audio';
 const music = {
   on: true, volume: 0.35, gain: null, buffers: {}, loading: {}, current: null,
@@ -562,6 +585,7 @@ let menuHop = {};                   // home screen: when each cat was last tappe
 let bubbles = [];                   // zero-gravity zones in this level
 let portals = [];                   // magic cat flaps in this level
 let vacs = [], swings = [];         // level 14's moving machines
+let fridge = null;                  // level 15's open fridge (world coords)
 const VAC_SPEED = 2.2;
 // Easter eggs on every level: a cardboard box to sit in, and a red laser dot that shows up while you aim
 const BOX = { x: 1000, w: 110, h: 64 };
@@ -646,7 +670,7 @@ function makeCoon(c) {
   const body = Bodies.circle(c.x, c.y, c.r, { density: 0.0025, friction: 0.7, restitution: 0.15, label: 'coon' });
   const hp = c.boss ? 320 : c.helmet ? 75 : 30;   // a colander helmet makes them much tougher
   body.game = { kind: 'coon', r: c.r, boss: c.boss, helmet: c.helmet, hp, maxHp: hp, blink: Math.random() * 200,
-    act: c.boss ? 'fish' : pick(COON_ACTS) };   // what it's doing with the loot
+    act: c.flashlight ? null : c.boss ? 'fish' : pick(COON_ACTS), flashlight: !!c.flashlight };   // what it's doing with the loot
   return body;
 }
 function makeLoot(l) {
@@ -680,6 +704,7 @@ function loadLevel(i) {
   for (const l of lv.loot) Composite.add(engine.world, makeLoot(l));
   floats = lv.floats.map(makeFloat);
   vacs = lv.vacs.map(makeVac); swings = lv.swings.map(makeSwing);
+  fridge = lv.fridge ? { ...lv.fridge, x: lv.fridge.x + FORT_X } : null;
   for (const f of floats) Composite.add(engine.world, [f.plank, f.coon, ...f.balloons, ...f.balloons.map(b => b.game.rope)]);
   const xs = [...lv.raccoons, ...lv.floats, ...lv.swings, ...lv.vacs.map(v => ({ x: (v.x0 + v.x1) / 2 }))].map(c => c.x);
   fortCenter = xs.reduce((s, x) => s + x, 0) / xs.length;
@@ -1912,6 +1937,15 @@ function drawCoon(x, y, r, ang, g) {
     ctx.restore();
   }
   if (g && g.act) drawCoonToy(r, g, t);
+  if (g && g.flashlight) {
+    // the lookout's flashlight, pointing wherever he's sweeping (independent of how he's tilted)
+    ctx.save(); ctx.rotate(flashAngle(g) - ang);
+    ctx.fillStyle = '#3a3f4a'; rr(r * 0.25, -r * 0.13, r * 0.75, r * 0.26, r * 0.08); ctx.fill();
+    ctx.fillStyle = '#5a606c'; rr(r * 0.9, -r * 0.19, r * 0.22, r * 0.38, r * 0.06); ctx.fill();
+    ctx.fillStyle = '#fff6c8'; ctx.beginPath(); ctx.ellipse(r * 1.12, 0, r * 0.05, r * 0.16, 0, 0, 7); ctx.fill();
+    coonPaw(r * 0.42, r * 0.06, r); coonPaw(r * 0.7, r * 0.1, r);
+    ctx.restore();
+  }
   ctx.lineCap = 'butt';
   ctx.restore();
   if (g && g.boss && g.hp < g.maxHp) {
@@ -1955,6 +1989,13 @@ function drawBlock(b) {
     ctx.restore();
     ctx.lineWidth = 3; ctx.strokeStyle = m.edge; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(r * 0.7, r * 0.7); ctx.quadraticCurveTo(r * 1.3, r * 0.8, r * 1.1, r * 1.3); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  if (g.mat === 'fridgeshelf' || g.mat === 'fridgetop') {
+    ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w, h, 3); ctx.fill();
+    ctx.strokeStyle = m.edge; ctx.lineWidth = 2; ctx.stroke();
+    if (g.mat === 'fridgeshelf') { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillRect(-w / 2 + 4, -h / 2 + 1, w - 8, 2); }
     ctx.restore();
     return;
   }
@@ -2182,6 +2223,160 @@ function drawBox() {
   ctx.fillStyle = 'rgba(240,225,190,0.7)'; ctx.fillRect(x - 6, top, 12, BOX.h);   // tape
   text('FRAGILE', x, top + BOX.h * 0.6, 13, '#b0473a', { weight: 700 });
 }
+// ---------------------------------------------------------------- night (level 15)
+// The room is darkened with an overlay that has the light sources cut out of it, then the lights add
+// their colour on top. Particles and score pop-ups are drawn after, so they stay bright.
+const flashAngle = g => Math.PI - 0.22 + 0.36 * Math.sin((frame + g.blink) * 0.011);   // sweeps from down at the floor up to level
+const FAIRY = ['#ff6b6b', '#ffd93d', '#6bcbff', '#c49bff', '#7dff9a'];
+const WINDOWS = [230, 1060].map(wx => ({ wx, wy: 110, ww: 420, wh: 400 }));
+let nightCanvas = null;
+const isNight = () => LEVELS[levelIdx] && LEVELS[levelIdx].night;
+// window glass at night: deep blue sky, the moon, twinkling stars, a dark garden and a few fireflies
+function nightWindows() {
+  for (const [i, w] of WINDOWS.entries()) {
+    const x = cam.x * (1 - FAR_P) + w.wx, y = w.wy;
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, w.ww, w.wh); ctx.clip();
+    const gr = ctx.createLinearGradient(0, y, 0, y + w.wh);
+    gr.addColorStop(0, '#0b1240'); gr.addColorStop(1, '#2b3a7a');
+    ctx.fillStyle = gr; ctx.fillRect(x, y, w.ww, w.wh);
+    for (let k = 0; k < 26; k++) { ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(frame * 0.03 + k * 7 + i)); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + hash(k * 3 + i) * w.ww, y + hash(k * 7 + i) * w.wh * 0.6, 2, 2); }
+    ctx.globalAlpha = 1;
+    if (i === 0) {
+      const mx = x + 300, my = y + 265;
+      const mg = ctx.createRadialGradient(mx, my, 20, mx, my, 120); mg.addColorStop(0, 'rgba(220,235,255,0.45)'); mg.addColorStop(1, 'rgba(220,235,255,0)');
+      ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(mx, my, 120, 0, 7); ctx.fill();
+      ctx.fillStyle = '#f4f1dc'; ctx.beginPath(); ctx.arc(mx, my, 42, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(190,190,170,0.45)'; for (const [dx, dy, rr2] of [[-12, -8, 8], [10, 10, 6], [14, -14, 4]]) { ctx.beginPath(); ctx.arc(mx + dx, my + dy, rr2, 0, 7); ctx.fill(); }
+    }
+    ctx.fillStyle = '#101a33'; ctx.beginPath(); ctx.moveTo(x, y + w.wh);
+    for (let k = 0; k <= w.ww; k += 20) ctx.lineTo(x + k, y + w.wh - 110 - Math.sin(k / 60 + w.wx) * 28);
+    ctx.lineTo(x + w.ww, y + w.wh); ctx.closePath(); ctx.fill();
+    for (let k = 0; k < 6; k++) {                                           // fireflies
+      const fx = x + (hash(k * 11 + i) * w.ww + Math.sin(frame * 0.01 + k) * 30), fy = y + w.wh - 60 - hash(k * 5 + i) * 120 + Math.cos(frame * 0.013 + k) * 15;
+      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(frame * 0.05 + k * 2);
+      const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 10); fg.addColorStop(0, '#f6ff9a'); fg.addColorStop(1, 'rgba(246,255,154,0)');
+      ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy, 10, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#c9d3e6'; ctx.lineWidth = 18; ctx.strokeRect(x, y, w.ww, w.wh);
+    ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + w.ww / 2, y); ctx.lineTo(x + w.ww / 2, y + w.wh); ctx.moveTo(x, y + w.wh * 0.45); ctx.lineTo(x + w.ww, y + w.wh * 0.45); ctx.stroke();
+    ctx.restore();
+  }
+}
+// the open fridge: white body, lit interior, the door swung open with bottles in it, and the bulb
+function drawFridge() {
+  if (!fridge) return;
+  const { x, top, w } = fridge, h = GROUND - top;
+  ctx.fillStyle = '#dfe6ec'; rr(x - 10, top - 14, w + 20, h + 14, 14); ctx.fill();
+  ctx.strokeStyle = '#9aa6b1'; ctx.lineWidth = 3; ctx.stroke();
+  const gr = ctx.createLinearGradient(0, top, 0, GROUND);
+  gr.addColorStop(0, '#f4fbff'); gr.addColorStop(1, '#bcd9ea');
+  ctx.fillStyle = gr; ctx.fillRect(x, top + 6, w, h - 10);
+  ctx.fillStyle = '#fffbe0'; ctx.beginPath(); ctx.ellipse(x + w / 2, top + 22, 18, 8, 0, 0, 7); ctx.fill();   // bulb
+  // the door, swung open toward us on the right
+  ctx.fillStyle = '#e9eef2';
+  ctx.beginPath(); ctx.moveTo(x + w + 10, top - 14); ctx.lineTo(x + w + 92, top + 6); ctx.lineTo(x + w + 92, GROUND - 6); ctx.lineTo(x + w + 10, GROUND); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#9aa6b1'; ctx.lineWidth = 3; ctx.stroke();
+  const cols = ['#e8726b', '#7fc4e8', '#f6d27a', '#9fd3a8'];
+  for (let k = 0; k < 4; k++) {
+    const yy = top + 70 + k * 72;
+    ctx.fillStyle = 'rgba(160,190,210,0.6)'; ctx.fillRect(x + w + 22, yy + 34, 62, 5);
+    for (let b = 0; b < 3; b++) { ctx.fillStyle = cols[(k + b) % 4]; rr(x + w + 26 + b * 19, yy + 4, 13, 30, 4); ctx.fill(); }
+  }
+  ctx.fillStyle = '#b9c3cc'; ctx.fillRect(x + w + 78, top + 120, 6, 90);  // handle
+}
+// a plug-in night light on the wall by the slingshot
+const NIGHT_LIGHT = { x: SLING.x - 175, y: 700 };
+function drawNightLight() {
+  const { x, y } = NIGHT_LIGHT;
+  ctx.fillStyle = '#f2ece0'; rr(x - 16, y - 22, 32, 44, 8); ctx.fill();
+  ctx.fillStyle = '#ffd98a'; ctx.beginPath(); ctx.arc(x, y - 4, 13, Math.PI, 0); ctx.lineTo(x + 13, y + 10); ctx.lineTo(x - 13, y + 10); ctx.closePath(); ctx.fill();
+}
+// fairy lights strung in swags along the ceiling
+function fairyBulbs() {
+  const out = [], x0 = 260, x1 = 2380, span = 300;
+  for (let x = x0; x <= x1; x += 38) {
+    const f = ((x - x0) % span) / span, y = 318 + Math.sin(f * Math.PI) * 46;
+    const k = Math.round((x - x0) / 38);
+    out.push({ x, y, c: FAIRY[k % FAIRY.length], a: 0.55 + 0.45 * Math.sin(frame * 0.06 + k * 1.7) });
+  }
+  return out;
+}
+function drawFairyWire(bulbs) {
+  ctx.strokeStyle = 'rgba(40,40,50,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
+  bulbs.forEach((b, i) => i ? ctx.lineTo(b.x, b.y - 4) : ctx.moveTo(b.x, b.y - 4)); ctx.stroke();
+  for (const b of bulbs) { ctx.fillStyle = b.c; ctx.beginPath(); ctx.ellipse(b.x, b.y + 3, 4.5, 6.5, 0, 0, 7); ctx.fill(); }
+}
+// a soft round light: cut out of the darkness (ctxN) or added as colour (ctx with 'lighter')
+function softLight(g, x, y, r, rgb, a) {
+  const gr = g.createRadialGradient(x, y, 0, x, y, r);
+  gr.addColorStop(0, `rgba(${rgb},${a})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+  g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+}
+function lookouts() { return bodies().filter(b => b.game && b.game.kind === 'coon' && b.game.flashlight && !b.game.dead); }
+// everything that gives off light this frame, as shapes that can be drawn into either canvas
+function nightLights() {
+  const L = [];
+  // moonlight: a slanted shaft from each window pane down to the floor
+  for (const w of WINDOWS) {
+    const x = cam.x * (1 - FAR_P) + w.wx;
+    for (const [px, pw] of [[x + 10, w.ww / 2 - 15], [x + w.ww / 2 + 5, w.ww / 2 - 15]]) for (const [py, ph] of [[w.wy + 10, w.wh * 0.45 - 15], [w.wy + w.wh * 0.45 + 5, w.wh * 0.55 - 15]]) {
+      const sk = 0.62, b0 = (GROUND - py) * sk;
+      L.push({ kind: 'poly', pts: [[px, py], [px + pw, py], [px + pw + b0, GROUND], [px + b0 * 0.75, GROUND]], y0: py, y1: GROUND, rgb: '170,200,255', cut: 0.24, glow: 0.05 });
+    }
+  }
+  // the fridge: its inside fully lit, and a big cold spill of light across the kitchen
+  if (fridge) {
+    L.push({ kind: 'rect', x: fridge.x - 4, y: fridge.top, w: fridge.w + 100, h: GROUND - fridge.top, cut: 0.95, glow: 0 });
+    L.push({ kind: 'round', x: fridge.x + 20, y: GROUND - 150, r: 520, rgb: '190,230,255', cut: 0.7, glow: 0.14 });
+  }
+  // the lookout's flashlight cone
+  for (const b of lookouts()) {
+    const a = flashAngle(b.game), r = b.game.r, ox = b.position.x + Math.cos(a) * r * 1.15, oy = b.position.y + Math.sin(a) * r * 1.15;
+    L.push({ kind: 'cone', x: ox, y: oy, a, spread: 0.24, len: 900, rgb: '255,236,170', cut: 0.85, glow: 0.22 });
+  }
+  // the night light, fairy lights, and flashes from explosions
+  L.push({ kind: 'round', x: NIGHT_LIGHT.x, y: NIGHT_LIGHT.y, r: 420, rgb: '255,190,110', cut: 0.85, glow: 0.18 });
+  for (const b of fairyBulbs()) L.push({ kind: 'round', x: b.x, y: b.y + 3, r: 46, rgb: hexRgb(b.c), cut: 0.35 * b.a, glow: 0.35 * b.a });
+  for (const p of particles) if (p.type === 'ring') L.push({ kind: 'round', x: p.x, y: p.y, r: p.s * 1.4, rgb: '255,210,140', cut: 0.9 * p.life / p.max, glow: 0.4 * p.life / p.max });
+  return L;
+}
+function hexRgb(h) { const n = parseInt(h.slice(1), 16); return `${n >> 16},${(n >> 8) & 255},${n & 255}`; }
+function paintLight(g, l, alpha, rgb) {
+  if (l.kind === 'round') softLight(g, l.x, l.y, l.r, rgb, alpha);
+  else if (l.kind === 'rect') { g.fillStyle = `rgba(${rgb},${alpha})`; g.fillRect(l.x, l.y, l.w, l.h); }
+  else if (l.kind === 'poly') {
+    const gr = g.createLinearGradient(0, l.y0, 0, l.y1); gr.addColorStop(0, `rgba(${rgb},${alpha})`); gr.addColorStop(1, `rgba(${rgb},${alpha * 0.3})`);
+    g.fillStyle = gr; g.beginPath(); l.pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.closePath(); g.fill();
+  } else if (l.kind === 'cone') {
+    const gr = g.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.len); gr.addColorStop(0, `rgba(${rgb},${alpha})`); gr.addColorStop(0.6, `rgba(${rgb},${alpha * 0.55})`); gr.addColorStop(1, `rgba(${rgb},0)`);
+    g.fillStyle = gr; g.beginPath(); g.moveTo(l.x, l.y); g.arc(l.x, l.y, l.len, l.a - l.spread, l.a + l.spread); g.closePath(); g.fill();
+    softLight(g, l.x, l.y, 40, rgb, alpha);                                 // the bright lens
+  }
+}
+function drawNight() {
+  const W = canvas.width, H = canvas.height;
+  if (!nightCanvas || nightCanvas.width !== W || nightCanvas.height !== H) { nightCanvas = document.createElement('canvas'); nightCanvas.width = W; nightCanvas.height = H; }
+  const n = nightCanvas.getContext('2d'), lights = nightLights();
+  n.setTransform(1, 0, 0, 1, 0, 0); n.globalCompositeOperation = 'source-over'; n.clearRect(0, 0, W, H);
+  n.fillStyle = 'rgba(6,8,30,0.88)'; n.fillRect(0, 0, W, H);
+  n.setTransform(ctx.getTransform());
+  n.globalCompositeOperation = 'destination-out';
+  for (const l of lights) paintLight(n, l, l.cut, '0,0,0');
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(nightCanvas, 0, 0); ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const l of lights) if (l.glow) paintLight(ctx, l, l.glow, l.rgb);
+  // eyeshine: cats' eyes catch the light in the dark
+  const eyes = [];
+  const add = (x, y, r, type) => { const e = type === 'cece' ? [0.3, -0.13] : type === 'baby' ? [0.34, -0.08] : [0.32, -0.1]; for (const sg of [-1, 1]) eyes.push([x + sg * e[0] * r, y + e[1] * r, r]); };
+  queueSpots().forEach(q => add(q.x, q.y, q.r, q.type));
+  if (phase === 'aim' && current) add(SLING.x + pull.x, SLING.y + pull.y, CATS[current].r, current);
+  for (const c of flying) if (!c.game.done) add(c.position.x, c.position.y, c.game.r, c.game.type);
+  for (const [x, y, r] of eyes) softLight(ctx, x, y, r * 0.22, '200,255,150', 0.55);
+  for (const b of fairyBulbs()) softLight(ctx, b.x, b.y + 3, 9, hexRgb(b.c), b.a);
+  ctx.restore();
+}
+
 function drawPortals() {
   for (const q of portals) {
     const r = PORTAL_R;
@@ -2248,6 +2443,7 @@ function drawBalloon(b) {
 }
 
 function drawWorld() {
+  if (isNight()) { nightWindows(); drawFridge(); drawNightLight(); drawFairyWire(fairyBulbs()); }
   // while it's about to snap, the whole slingshot shakes harder and harder
   const creak = snapStrain / SNAP_DELAY;
   const sj = creak > 0 ? { x: (Math.random() - 0.5) * (3 + 8 * creak), y: (Math.random() - 0.5) * (2 + 4 * creak) } : { x: 0, y: 0 };
@@ -2334,6 +2530,7 @@ function drawWorld() {
     if (!bandSnapped) band(SLING.x - 24 + sj.x, 646 + sj.y, tip.x - 6, tip.y, strain);
   }
   ctx.save(); ctx.translate(sj.x, sj.y); drawSlingFront(); ctx.restore();
+  if (isNight()) drawNight();
 
   for (const p of particles) {
     const a = p.life / p.max;

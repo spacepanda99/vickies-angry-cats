@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 33;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 35;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -39,6 +39,7 @@ const MATS = {
   shelf:  { fill: '#b07d4f', edge: '#7a4f2a', points: 0 },                                           // fixed to the wall
   ramp:   { fill: '#e2c69c', edge: '#a8875a', points: 0 },                                           // fixed cardboard slide
   cage:   { density: 0.0015, health: 30, fill: 'rgba(225,235,250,0.3)', edge: '#7d8594', points: 0 },    // a kitten is locked inside
+  mug:    { density: 0.0012, health: 14, fill: '#f7f3ea', edge: '#8f8676', points: 1500 },             // Easter egg: knock it off!
 };
 
 const CATS = {
@@ -102,19 +103,23 @@ function book(lv, x, h) { block(lv, 'book', x, GROUND - h / 2, 22, h); }
 function decoy(lv, x) { block(lv, 'decoy', x, GROUND - 70, 92, 140); }
 // a raccoon on a plank held up by party balloons; it hovers around y until a balloon pops
 function floatie(lv, x, y) { lv.floats.push({ x, y }); }
+// a zero-gravity bubble (Angry Birds Space): anything inside floats; knock it out and it falls
+function bubble(lv, x, y, r) { lv.bubbles.push({ x, y, r }); }
+// a mug sitting on something. Cats knock things off tables: break it for a bonus
+function mug(lv, x, base) { block(lv, 'mug', x, base - 15, 26, 30); }
 
 // Every level gets each cat exactly once.
 const LEVELS = [
   { name: 'The Back Door', cats: ['cleo', 'baby', 'cece'], build(lv) {
     const t = hut(lv, 1150, GROUND, 160, 100, 'wood', 'wood');
-    coon(lv, 1150, GROUND); coon(lv, 1150, t);
+    coon(lv, 1150, GROUND); coon(lv, 1150, t); mug(lv, 1205, t);
     loot(lv, 1300, GROUND, 'fish');
   } },
   { name: 'Kitchen Raid', cats: ['baby', 'cleo', 'cece'], build(lv) {
     const t1 = hut(lv, 1020, GROUND, 140, 110, 'glass', 'wood'); coon(lv, 1020, GROUND);
     const t2 = hut(lv, 1020, t1, 140, 110, 'glass', 'wood'); coon(lv, 1020, t1); coon(lv, 1020, t2);
     const t3 = hut(lv, 1300, GROUND, 170, 90, 'wood', 'glass'); coon(lv, 1300, GROUND);
-    loot(lv, 1300, t3, 'yarn');
+    loot(lv, 1300, t3, 'yarn'); mug(lv, 1360, t3);
   } },
   { name: 'The Garage', cats: ['cleo', 'cece', 'baby'], build(lv) {
     const s = hut(lv, 1150, GROUND, 300, 110, 'stone', 'stone'); coon(lv, 1150, GROUND);
@@ -151,7 +156,7 @@ const LEVELS = [
   { name: 'Bookshelf Dominoes', cats: ['cleo', 'baby', 'cece'], build(lv) {
     for (let i = 0; i < 9; i++) book(lv, 820 + i * 38, 112 + (i % 3) * 8);   // knock the first one over...
     const t = hut(lv, 1236, GROUND, 150, 100, 'glass', 'wood'); coon(lv, 1236, GROUND); loot(lv, 1236, t, 'fish');
-    const s1 = shelf(lv, 1050, 610, 230); coon(lv, 1000, s1); coon(lv, 1100, s1);
+    const s1 = shelf(lv, 1050, 610, 230); coon(lv, 1000, s1); coon(lv, 1100, s1); mug(lv, 1152, s1);
     const s2 = shelf(lv, 1360, 560, 170); coon(lv, 1335, s2); loot(lv, 1410, s2, 'yarn');
   } },
   { name: 'Yarn Ball Avalanche', cats: ['baby', 'cece', 'cleo'], build(lv) {
@@ -187,6 +192,19 @@ const LEVELS = [
     const t2 = hut(lv, 1360, t1, 140, 100, 'wood', 'glass'); coon(lv, 1360, t1);
     coon(lv, 1318, t2, false, true); cage(lv, 1400, t2, 70);
     const g = shelf(lv, 1490, 400, 70); loot(lv, 1490, g, 'goldfish');     // the secret
+  } },
+  // Angry Birds Space's zero-gravity bubbles, the most-loved spin-off mechanic: the kids' science-fair
+  // anti-gravity bubbles. Inside one nothing falls, so shots fly dead straight and raccoons drift.
+  { name: 'Zero-G Zoomies', cats: ['cleo', 'cece', 'baby'], build(lv) {
+    bubble(lv, 1060, 560, 160);
+    coon(lv, 1060, 597);                                                    // floating in the middle
+    block(lv, 'wood', 985, 520, 20, 100); block(lv, 'glass', 1135, 600, 20, 100); block(lv, 'wood', 1060, 478, 110, 18);
+    catnip(lv, 1000, 660); loot(lv, 1120, 520, 'yarn');
+    bubble(lv, 1330, 460, 115);
+    coon(lv, 1330, 497, false, true); mug(lv, 1268, 430);
+    hut(lv, 900, GROUND, 110, 80, 'glass', 'wood'); coon(lv, 900, GROUND);
+    const t = hut(lv, 1330, GROUND, 170, 110, 'stone', 'wood'); coon(lv, 1330, GROUND); coon(lv, 1330, t);
+    bubble(lv, 1490, 330, 50); loot(lv, 1490, 344, 'goldfish');            // the secret, up in its own bubble
   } },
 ];
 
@@ -471,6 +489,11 @@ function chatterBubble(who, x, y) {
   ctx.restore();
 }
 let menuHop = {};                   // home screen: when each cat was last tapped
+let bubbles = [];                   // zero-gravity zones in this level
+// Easter eggs on every level: a cardboard box to sit in, and a red laser dot that shows up while you aim
+const BOX = { x: 1000, w: 110, h: 64 };
+let boxCat = null;                  // which cat climbed into the box ("if I fits, I sits")
+let laser = null, laserWait = 0, laserCaught = false;
 
 let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
@@ -547,9 +570,9 @@ function makeCat(type, x, y, r) {
 function loadLevel(i) {
   levelIdx = i;
   newEngine();
-  const lv = { blocks: [], raccoons: [], loot: [], floats: [] };
+  const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [] };
   LEVELS[i].build(lv);
-  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
+  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats, lv.bubbles]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
   Composite.add(engine.world, Bodies.rectangle(WORLD_W / 2, GROUND + 60, WORLD_W * 3, 120, { isStatic: true, friction: 0.9, label: 'ground' }));
   for (const b of lv.blocks) Composite.add(engine.world, makeBlock(b));
   for (const c of lv.raccoons) Composite.add(engine.world, makeCoon(c));
@@ -564,6 +587,8 @@ function loadLevel(i) {
   flying = []; powerUsed = false; flyTimer = 0; outTimer = 0; winTimer = -1;
   settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
+  bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
+  if (bubbles.length) popups.push({ x: fortCenter, y: 330, text: 'Zero gravity inside the bubbles!', life: 150, big: true });
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
   scheduleChatter([current, ...queue], 70);   // plotting while the camera glides back from the fort
@@ -741,6 +766,51 @@ function catnipBoom(pos) {
 // ---------------------------------------------------------------- simulation step
 
 function bodies() { return Composite.allBodies(engine.world); }
+const inZone = (z, x, y) => (x - z.x) * (x - z.x) + (y - z.y) * (y - z.y) < z.r * z.r;
+const inBubble = (x, y) => bubbles.some(z => inZone(z, x, y));
+
+// ---- Easter eggs
+
+// "If I fits, I sits": a cat that ends up in the cardboard box climbs in and stays there
+function sitInBox(b) {
+  const g = b.game;
+  boxCat = g.type; g.done = true; g.boxed = true;
+  Composite.remove(engine.world, b);
+  addScore(2500, { x: BOX.x, y: GROUND - BOX.h - 40 }, g.type === 'cece' ? 'If I fits... I sits! (barely) +2500' : 'If I fits, I sits! +2500');
+  sparkle({ x: BOX.x, y: GROUND - BOX.h }, 10); sfx.ding();
+  sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6, 0.1);
+}
+// the red laser dot: now and then while aiming it skitters around the floor near the slingshot
+function updateLaser() {
+  if (state !== 'play') return;
+  if (laser) {
+    if (--laser.life <= 0 || phase !== 'aim') { laser = null; return; }
+    if (--laser.hop <= 0) { laser.tx = rand(60, 720); laser.ty = Math.random() < 0.7 ? GROUND - 3 : rand(560, 760); laser.hop = 18 + Math.random() * 40; }
+    laser.x += (laser.tx - laser.x) * 0.22; laser.y += (laser.ty - laser.y) * 0.22;
+  } else if (!laserCaught && phase === 'aim' && current && introTimer === 0 && !dragging && --laserWait <= 0) {
+    laser = { x: rand(100, 600), y: GROUND - 3, tx: 0, ty: 0, hop: 0, life: 360 };
+    laserWait = 900 + Math.random() * 900;
+  }
+}
+function catchLaser() {
+  laserCaught = true;
+  addScore(500, laser, 'Got the red dot! +500'); sparkle(laser, 10);
+  [current, ...queue].forEach((type, who) => chatter.push({ type, who, t: 1 + who * 6, life: CHATTER_LIFE, sym: '!' }));
+  laser = null;
+}
+// the cats waiting their turn, lined up behind the slingshot (spaced by size, so big CeCe doesn't overlap)
+function queueSpots() {
+  const out = []; let qx = SLING.x - 45;
+  queue.forEach(type => { const r = CATS[type].r * 0.75; qx -= r * 1.15; out.push({ type, x: qx, y: GROUND - r, r }); qx -= r * 1.15 + 6; });
+  return out;
+}
+// tap a waiting cat to pet her: a hop, a happy noise and some hearts
+function petCat(i, spot) {
+  if (chatter.some(c => c.who === i + 1)) return;
+  chatter.push({ type: spot.type, who: i + 1, t: 1, life: CHATTER_LIFE, sym: '♥' });
+  for (let k = 0; k < 4; k++) particles.push({ type: 'heart', x: spot.x + rand(-15, 15), y: spot.y - spot.r, vx: rand(-1, 1), vy: rand(-2.5, -1.2), s: rand(7, 11), life: 50, max: 50 });
+}
+
 function coonsAlive() { let n = 0; for (const b of bodies()) if (b.game && b.game.kind === 'coon' && !b.game.dead) n++; return n; }
 
 function step() {
@@ -783,6 +853,14 @@ function step() {
     for (const b of alive) Body.applyForce(b, b.position, { x: 0, y: -f.weight / f.balloons.length * k });
     if (!f.broken) Body.setAngularVelocity(f.plank, f.plank.angularVelocity * 0.8 - f.plank.angle * 0.06);   // keep the plank level
   }
+  // zero-gravity bubbles: inside one, gravity is cancelled and things slowly drift to a stop
+  for (const z of bubbles) for (const b of bodies()) {
+    if (b.isStatic || b.isSleeping || !inZone(z, b.position.x, b.position.y)) continue;
+    Body.applyForce(b, b.position, { x: 0, y: -b.mass * engine.gravity.scale * engine.gravity.y });
+    Body.setVelocity(b, Vector.mult(b.velocity, b.game && b.game.kind === 'cat' ? 0.996 : 0.99));
+    Body.setAngularVelocity(b, b.angularVelocity * 0.98);
+  }
+  updateLaser();
   Engine.update(engine, STEP);
   if (settle > 0) settle--;
   if (snapTimer > 0) snapTimer--;
@@ -813,6 +891,7 @@ function step() {
       }
       // rolling resistance on the floor, so a weak (snapped) roll peters out short of the fort
       if (b.position.y > GROUND - g.r - 3) Body.setVelocity(b, { x: b.velocity.x * (CATS[g.type].rollDrag || 0.99), y: b.velocity.y });
+      if (!boxCat && !g.done && Math.abs(b.position.x - BOX.x) < BOX.w / 2 - 8 && b.position.y > GROUND - BOX.h - g.r && Vector.magnitude(b.velocity) < 6) { sitInBox(b); continue; }
       // CeCe is heavy but soft: everything she hits soaks up some of her speed, so she can't bulldoze a whole level
       if (g.bump) { Body.setVelocity(b, Vector.mult(b.velocity, CATS[g.type].bumpDamp)); g.bump = false; }
       if (frame % 2 === 0) { g.trail.push({ x: b.position.x, y: b.position.y }); if (g.trail.length > 40) g.trail.shift(); }
@@ -830,6 +909,7 @@ function step() {
       Composite.remove(engine.world, b);
       const g = b.game;
       if (g.kind === 'block' && MATS[g.mat].explodes) { addScore(MATS[g.mat].points, b.position, 'KABOOM!'); catnipBoom(b.position); }
+      else if (g.kind === 'block' && g.mat === 'mug') { addScore(MATS.mug.points, b.position, 'Oops! Knocked it off! +1500'); debris(b); sfx.crumble('glass'); sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.2); }
       else if (g.kind === 'block' && g.mat === 'decoy') { addScore(3000, b.position, 'It was a cardboard decoy!'); debris(b); sfx.crumble('decoy'); }
       else if (g.kind === 'balloon') { Composite.remove(engine.world, g.rope); addScore(200, b.position, 'POP!'); poof(b.position, 5, 0.5); sfx.tone('square', 900, 200, 0.08, 0.12); }
       else if (g.kind === 'block') { addScore(MATS[g.mat].points, b.position); debris(b); sfx.crumble(g.mat); }
@@ -869,7 +949,7 @@ function updatePhase() {
       if (g.rest > 50 || flyTimer > 60 * 10) g.done = true; else allDone = false;
     }
     if (allDone) {
-      for (const c of flying) { if (c.position.y < H + 200) poof(c.position, 6, c.game.r / 26); Composite.remove(engine.world, c); }
+      for (const c of flying) { if (c.position.y < H + 200 && !c.game.boxed) poof(c.position, 6, c.game.r / 26); Composite.remove(engine.world, c); }
       flying = [];
       if (queue.length) { current = queue.shift(); phase = 'aim'; panIdle = 999; upBanner = { type: current, t: 0 }; chatter = [{ type: current, who: 0, t: 8, life: CHATTER_LIFE, sym: '!' }]; }
       else { phase = 'out'; outTimer = 150; }
@@ -958,6 +1038,11 @@ canvas.addEventListener('pointerdown', e => {
     if (upBanner && upBanner.t < 0) upBanner.t = 0;   // never shoot before it says who is up
     updatePull(p);
     return;
+  }
+  if (laser && Math.hypot(p.x - laser.x, p.y - laser.y) < 55) { catchLaser(); return; }
+  if (phase !== 'flying') {
+    const spots = queueSpots(), i = spots.findIndex(q => Math.hypot(p.x - q.x, p.y - q.y) < q.r + 10);
+    if (i >= 0) { petCat(i, spots[i]); return; }
   }
   if (phase === 'flying') { usePower(); return; }
   // anywhere else: drag the background to look around
@@ -1438,6 +1523,15 @@ function drawBlock(b) {
     ctx.restore();
     return;
   }
+  if (g.mat === 'mug') {
+    // a mug, sitting right where a cat can bat it off
+    ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w - 5, h, 4); ctx.fill();
+    ctx.strokeStyle = m.edge; ctx.lineWidth = 2; ctx.stroke();
+    ctx.lineWidth = 3.5; ctx.beginPath(); ctx.arc(w / 2 - 5, 0, 7, -1.3, 1.3); ctx.stroke();
+    text('♥', -2.5, 1, 14, '#e8578f');
+    ctx.restore();
+    return;
+  }
   if (g.mat === 'decoy') {
     // cardboard cut-out of the boss on a little easel stand
     ctx.fillStyle = '#9a7a50'; ctx.fillRect(-4, 10, 8, h / 2 - 10); ctx.fillRect(-24, h / 2 - 6, 48, 6);
@@ -1582,13 +1676,53 @@ function drawTrajectory() {
   let x = SLING.x + pull.x, y = SLING.y + pull.y, vx = v0.x, vy = v0.y;
   const fa = 1 - (CATS[current].frictionAir || 0.004);
   for (let i = 1; i <= 70; i++) {
-    vx *= fa; vy = vy * fa + GRAV_STEP; x += vx; y += vy;
+    const z = inBubble(x, y);
+    if (z) { vx *= 0.996; vy *= 0.996; }
+    vx *= fa; vy = vy * fa + (z ? 0 : GRAV_STEP); x += vx; y += vy;
     if (y > GROUND) break;
     if (i % 4 === 0) {
       ctx.fillStyle = `rgba(255,255,255,${0.95 - i / 90})`; ctx.strokeStyle = `rgba(60,70,90,${0.5 - i / 160})`; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(x, y, 6 - i / 20, 0, 7); ctx.fill(); ctx.stroke();
     }
   }
+}
+
+function drawBubbles() {
+  for (const z of bubbles) {
+    const gr = ctx.createRadialGradient(z.x - z.r * 0.3, z.y - z.r * 0.3, z.r * 0.1, z.x, z.y, z.r);
+    gr.addColorStop(0, 'rgba(190,170,255,0.08)'); gr.addColorStop(0.8, 'rgba(140,120,255,0.16)'); gr.addColorStop(1, 'rgba(205,195,255,0.4)');
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(z.x, z.y, z.r, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(235,230,255,0.75)'; ctx.lineWidth = 3; ctx.setLineDash([14, 10]); ctx.lineDashOffset = -frame * 0.4; ctx.stroke(); ctx.setLineDash([]);
+    // twinkling specks drifting round inside
+    for (let i = 0; i < 7; i++) {
+      const a = hash(i + z.x) * 7 + frame * 0.004 * (i % 2 ? 1 : -1), d = z.r * (0.25 + 0.65 * hash(i * 3 + z.y));
+      ctx.globalAlpha = 0.4 + 0.4 * Math.sin(frame * 0.07 + i); starShape(z.x + Math.cos(a) * d, z.y + Math.sin(a) * d, 4, '#ffffff');
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(z.x - z.r * 0.45, z.y - z.r * 0.5, z.r * 0.18, z.r * 0.08, -0.7, 0, 7); ctx.fill();
+  }
+}
+// the cardboard box (and whoever has climbed into it)
+function drawBox() {
+  const x = BOX.x, w = BOX.w, top = GROUND - BOX.h;
+  ctx.fillStyle = '#b98a55';                                              // back flap
+  ctx.beginPath(); ctx.moveTo(x - w / 2 + 6, top); ctx.lineTo(x - w / 2 + 16, top - 24); ctx.lineTo(x + w / 2 - 16, top - 24); ctx.lineTo(x + w / 2 - 6, top); ctx.closePath(); ctx.fill();
+  if (boxCat) drawCat(x, top - 8 - Math.abs(Math.sin(frame * 0.03)) * 3, 30, 0, boxCat, { calm: true });
+  ctx.fillStyle = '#d9a86c'; ctx.fillRect(x - w / 2, top, w, BOX.h);
+  ctx.strokeStyle = '#8a6136'; ctx.lineWidth = 3; ctx.strokeRect(x - w / 2, top, w, BOX.h);
+  ctx.fillStyle = '#c9965b';                                              // side flaps flopped open
+  for (const sgn of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sgn * w / 2, top); ctx.lineTo(x + sgn * (w / 2 + 30), top - 12); ctx.lineTo(x + sgn * (w / 2 + 26), top + 12); ctx.closePath(); ctx.fill(); ctx.stroke(); }
+  ctx.fillStyle = 'rgba(240,225,190,0.7)'; ctx.fillRect(x - 6, top, 12, BOX.h);   // tape
+  text('FRAGILE', x, top + BOX.h * 0.6, 13, '#b0473a', { weight: 700 });
+}
+function drawLaser() {
+  if (!laser) return;
+  ctx.globalAlpha = Math.min(1, laser.life / 20);
+  const gr = ctx.createRadialGradient(laser.x, laser.y, 0, laser.x, laser.y, 16);
+  gr.addColorStop(0, 'rgba(255,40,40,0.9)'); gr.addColorStop(1, 'rgba(255,0,0,0)');
+  ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(laser.x, laser.y, 16, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffd6d6'; ctx.beginPath(); ctx.arc(laser.x, laser.y, 3.5, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1;
 }
 
 function drawBalloon(b) {
@@ -1604,16 +1738,14 @@ function drawWorld() {
   const creak = snapStrain / SNAP_DELAY;
   const sj = creak > 0 ? { x: (Math.random() - 0.5) * (3 + 8 * creak), y: (Math.random() - 0.5) * (2 + 4 * creak) } : { x: 0, y: 0 };
   ctx.save(); ctx.translate(sj.x, sj.y); drawSlingBack(); ctx.restore();
+  drawBox();
   // waiting cats sit in line behind the slingshot
-  // (spaced by size, so big CeCe doesn't overlap her neighbour)
-  let qx = SLING.x - 45;
-  queue.forEach((type, i) => {
-    const r = CATS[type].r * 0.75, bob = Math.sin(frame * 0.05 + i) * 2 - chatterHop(i + 1);
-    qx -= r * 1.15;
-    drawCat(qx, GROUND - r + bob, r, 0, type, { calm: !chatterAt(i + 1) });
-    chatterBubble(i + 1, qx + r * 0.3, GROUND - r * 2.3 + bob);
-    qx -= r * 1.15 + 6;
+  queueSpots().forEach((q, i) => {
+    const bob = Math.sin(frame * 0.05 + i) * 2 - chatterHop(i + 1);
+    drawCat(q.x, q.y + bob, q.r, 0, q.type, { calm: !chatterAt(i + 1) });
+    chatterBubble(i + 1, q.x + q.r * 0.3, GROUND - q.r * 2.3 + bob);
   });
+  drawLaser();
 
   const loaded = phase === 'aim' && current;
   const strain = loaded && current === 'cece' && !bandSnapped
@@ -1625,6 +1757,7 @@ function drawWorld() {
 
   const list = bodies().filter(b => b.game);
   const order = { block: 0, loot: 1, balloon: 2, coon: 3, cat: 4 };
+  drawBubbles();
   // balloon strings, drawn behind everything on the platform
   ctx.strokeStyle = 'rgba(80,80,90,0.7)'; ctx.lineWidth = 2;
   for (const f of floats) for (const bl of f.balloons) {

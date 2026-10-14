@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 28;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 30;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -45,9 +45,9 @@ const CATS = {
           body: '#a5a4aa', dark: '#6f6e75', belly: '#f4f4f6', eye: '#cfc77e', patch: '#cbcacf',
           power: 'split', hint: 'Tap for ninja clones!' },
   // CeCe weighs a ton: she launches weak, lands short, then rolls like a bowling ball.
-  cece: { name: 'CeCe', r: 70, density: 0.00553, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82,
+  cece: { name: 'CeCe', r: 70, density: 0.00553, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82, pullCurve: 0.9, rollDrag: 0.98, bumpDamp: 0.55,
           body: '#93826f', dark: '#3e342c', belly: '#fbfaf7', eye: '#b9b46a', patch: '#d9984f',
-          power: 'shake', hint: 'Tap for the head shake!' },
+          power: 'shake', hint: 'Tap to head shake! (again and again)' },
   cleo: { name: 'Cleo', r: 34, density: 0.004, restitution: 0.3, friction: 0.5,
           body: '#f0c99a', dark: '#c98f58', belly: '#fffdf8', eye: '#b5d39c', patch: '#e6ae74',
           power: 'prance', hint: 'Tap to prance!' },
@@ -148,8 +148,8 @@ const LEVELS = [
   { name: 'Bookshelf Dominoes', cats: ['cleo', 'baby', 'cece'], build(lv) {
     for (let i = 0; i < 9; i++) book(lv, 820 + i * 38, 112 + (i % 3) * 8);   // knock the first one over...
     const t = hut(lv, 1236, GROUND, 150, 100, 'glass', 'wood'); coon(lv, 1236, GROUND); loot(lv, 1236, t, 'fish');
-    const s1 = shelf(lv, 1050, 560, 230); coon(lv, 1000, s1); coon(lv, 1100, s1);
-    const s2 = shelf(lv, 1360, 500, 170); coon(lv, 1335, s2); loot(lv, 1410, s2, 'yarn');
+    const s1 = shelf(lv, 1050, 610, 230); coon(lv, 1000, s1); coon(lv, 1100, s1);
+    const s2 = shelf(lv, 1360, 560, 170); coon(lv, 1335, s2); loot(lv, 1410, s2, 'yarn');
   } },
   { name: 'Yarn Ball Avalanche', cats: ['baby', 'cece', 'cleo'], build(lv) {
     ramp(lv, [[880, GROUND], [880, 600], [1140, GROUND]]);
@@ -569,6 +569,7 @@ function onCollide(ev) {
   for (const p of ev.pairs) {
     const a = p.bodyA, b = p.bodyB, ga = a.game, gb = b.game;
     if (ga && ga.prancing) ga.landed = true;
+    for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon')) c.bump = true;
     if (gb && gb.prancing) gb.landed = true;
     if (ga && gb) {
       if (ga.kind === 'cat' && gb.kind === 'loot') { gb.collected = true; kill(b); }
@@ -616,6 +617,14 @@ function sparkle(pos, n = 8) {
 // ---------------------------------------------------------------- actions
 
 const launchPower = type => POWER * (CATS[type].launch || 1);
+// Launch speed for a pull. CeCe's power climbs steeply with the pull (pullCurve), so a half pull
+// plops her short and only a near-full pull reaches the fort.
+function launchVel(type, p) {
+  const t = CATS[type], d = Math.hypot(p.x, p.y) || 1;
+  let k = launchPower(type);
+  if (t.pullCurve) k *= Math.pow(Math.min(1, d / SNAP_PULL), t.pullCurve);
+  return { x: -p.x * k, y: -p.y * k };
+}
 
 function launch() {
   const body = makeCat(current, SLING.x + pull.x, SLING.y + pull.y);
@@ -626,8 +635,7 @@ function launch() {
     Body.setVelocity(body, { x: Math.max(1.5, (-pull.x / d) * 2.5 + 1), y: -3.5 });
     snapTimer = 100; bandSnapped = false;
   } else {
-    const k = launchPower(current);
-    Body.setVelocity(body, { x: -pull.x * k, y: -pull.y * k });
+    Body.setVelocity(body, launchVel(current, pull));
   }
   Body.setAngularVelocity(body, snapped ? 0.02 : -pull.x * 0.0012);
   Composite.add(engine.world, body);
@@ -640,8 +648,9 @@ function usePower() {
   if (phase !== 'flying' || powerUsed || !flying.length) return;
   const c = flying[0], g = c.game;
   if (g.done || g.dead || flyTimer < 6) return;
-  powerUsed = true;
   const t = CATS[g.type];
+  // CeCe can head-shake again and again (short cooldown); the others get one power per shot
+  if (t.power === 'shake') { if (g.shake > 12) return; } else powerUsed = true;
   if (t.power === 'split') {
     for (const ang of [-0.24, 0.24]) {
       const nb = makeCat('baby', c.position.x, c.position.y);
@@ -651,8 +660,15 @@ function usePower() {
     }
     poof(c.position, 6, 0.6); sfx.pop(); sfx.cat(CAT_SOUNDS.power.baby, 0.6);
   } else if (t.power === 'shake') {
-    // CeCe's signature fast head shake: a blast of fur that shoves and dents everything nearby
+    // CeCe's signature fast head shake: whatever she's touching gets wrecked outright,
+    // and a blast of fur shoves and dents everything else nearby
     g.shake = 42;
+    for (const b of bodies()) {
+      if (b === c || b.isStatic || !b.game || b.game.kind === 'cat' || b.game.dead || b.game.hp === undefined) continue;
+      const size = b.game.r || Math.max(b.game.w || 0, b.game.h || 0) / 2 || 20;
+      const touching = Matter.Query.collides(c, [b]).length > 0 || Vector.magnitude(Vector.sub(b.position, c.position)) < g.r + size * 0.6 + 8;
+      if (touching) { b.game.hp = 0; kill(b); sparkle(b.position, 5); }
+    }
     const R = 260;
     for (const b of bodies()) {
       if (b === c || b.isStatic || !b.game || b.game.kind === 'cat' || b.game.dead) continue;
@@ -770,7 +786,9 @@ function step() {
         g.landed = false;
       }
       // rolling resistance on the floor, so a weak (snapped) roll peters out short of the fort
-      if (b.position.y > GROUND - g.r - 3) Body.setVelocity(b, { x: b.velocity.x * 0.99, y: b.velocity.y });
+      if (b.position.y > GROUND - g.r - 3) Body.setVelocity(b, { x: b.velocity.x * (CATS[g.type].rollDrag || 0.99), y: b.velocity.y });
+      // CeCe is heavy but soft: everything she hits soaks up some of her speed, so she can't bulldoze a whole level
+      if (g.bump) { Body.setVelocity(b, Vector.mult(b.velocity, CATS[g.type].bumpDamp)); g.bump = false; }
       if (frame % 2 === 0) { g.trail.push({ x: b.position.x, y: b.position.y }); if (g.trail.length > 40) g.trail.shift(); }
     }
     if (b.position.y > H + 300 || b.position.x < -300 || b.position.x > WORLD_W + 300) {
@@ -1467,8 +1485,8 @@ function snappedBands() {
 }
 
 function drawTrajectory() {
-  const k = launchPower(current);
-  let x = SLING.x + pull.x, y = SLING.y + pull.y, vx = -pull.x * k, vy = -pull.y * k;
+  const v0 = launchVel(current, pull);
+  let x = SLING.x + pull.x, y = SLING.y + pull.y, vx = v0.x, vy = v0.y;
   const fa = 1 - (CATS[current].frictionAir || 0.004);
   for (let i = 1; i <= 70; i++) {
     vx *= fa; vy = vy * fa + GRAV_STEP; x += vx; y += vy;
@@ -1746,11 +1764,81 @@ function drawHuddle() {
   ctx.restore();
 }
 
+// ---- title logo: chunky scuffed cartoon letters (Angry Birds logo style), drawn once to an offscreen canvas ----
+let logoCanvas = null, logoBuiltWithFont = false;
+const LOGO_W = 1100, LOGO_H = 470, LOGO_S = 2;
+function buildLogo() {
+  const fontReady = !document.fonts || document.fonts.check("40px 'Luckiest Guy'");
+  if (logoCanvas && (logoBuiltWithFont || !fontReady)) return;
+  logoBuiltWithFont = fontReady;
+  const mk = () => { const c = document.createElement('canvas'); c.width = LOGO_W * LOGO_S; c.height = LOGO_H * LOGO_S; const g = c.getContext('2d'); g.scale(LOGO_S, LOGO_S); return [c, g]; };
+  const [c, g] = mk(), [fc, fg] = mk();          // fc holds the white letter faces, textured on their own
+  const font = size => `${size}px 'Luckiest Guy', Bangers, Impact, sans-serif`;
+  // [char, size, tilt, bounce]: every letter a little crooked, like the Angry Birds logo
+  const lines = [
+    { y: 190, chars: [['A', 150, -0.07, 6], ['N', 140, 0.05, -4], ['G', 148, -0.04, 4], ['R', 138, 0.06, -6], ['Y', 150, -0.05, 2]] },
+    { y: 372, chars: [['C', 172, -0.06, 2], ['A', 158, 0.04, -6], ['T', 166, -0.05, 4], ['S', 162, 0.07, -2]] },
+  ];
+  const placed = [];
+  for (const ln of lines) {
+    const widths = ln.chars.map(([ch, size]) => { g.font = font(size); return g.measureText(ch).width + 12; });   // room for the thick outlines
+    let x = LOGO_W / 2 - widths.reduce((s, w) => s + w, 0) / 2;
+    ln.chars.forEach(([ch, size, rot, dy], i) => { placed.push({ ch, size, rot, x: x + widths[i] / 2, y: ln.y + dy }); x += widths[i]; });
+  }
+  // cat ears on top of the C
+  const C = placed.find(p => p.ch === 'C');
+  g.font = font(C.size); const cm = g.measureText('C'), cAsc = cm.actualBoundingBoxAscent || C.size * 0.75;
+  const ears = [[-0.3, -0.18], [0.14, 0.2]].map(([dx, tilt]) => ({ x: C.x + dx * cm.width, y: C.y - cAsc + 4, tilt }));
+  const earPath = (k, e) => { k.save(); k.translate(e.x, e.y); k.rotate(e.tilt); k.beginPath(); k.moveTo(-26, 18); k.lineTo(0, -34); k.lineTo(26, 18); k.closePath(); k.restore(); };
+  // whisker swooshes behind CATS (the logo's "wings")
+  const line2 = placed.slice(5), edge = side => side < 0 ? line2[0].x - line2[0].size * 0.42 : line2[line2.length - 1].x + line2[line2.length - 1].size * 0.42;
+  for (const side of [-1, 1]) for (const [dy, len, bend] of [[-36, 150, -26], [0, 175, 0], [36, 150, 26]]) {
+    const x0 = edge(side) + side * 14, y0 = 335 + dy, x1 = x0 + side * len, y1 = y0 + bend * 1.4;
+    for (const [w, col] of [[22, '#1f3b5a'], [14, '#8fd3ff'], [4, '#e8f8ff']]) {
+      g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x0, y0); g.quadraticCurveTo((x0 + x1) / 2, y0 + bend * 0.2 - 10, x1, y1); g.stroke();
+    }
+  }
+  const each = fn => { for (const p of placed) { g.save(); g.translate(p.x, p.y); g.rotate(p.rot); g.font = font(p.size); g.textAlign = 'center'; g.textBaseline = 'alphabetic'; fn(p); g.restore(); } };
+  const outline = (w, col) => { each(p => { g.strokeStyle = col; g.lineWidth = w; g.strokeText(p.ch, 0, 0); }); for (const e of ears) { earPath(g, e); g.lineWidth = w; g.strokeStyle = col; g.stroke(); } };
+  g.lineJoin = 'round';
+  g.save(); g.translate(7, 9); outline(30, 'rgba(40,20,10,0.35)'); g.restore();                                   // drop shadow
+  for (let k = 0; k < 4; k++) { g.save(); g.translate((hash(k * 3.1) - 0.5) * 3, (hash(k * 7.3) - 0.5) * 3); outline(28, '#3b2414'); g.restore(); }   // bumpy dark edge
+  outline(17, '#f2a91c'); outline(9, '#ffd34d');                                                                  // gold rim
+  // white faces, cool-shaded toward the bottom, then scuffs painted only onto the letters
+  const grad = fg.createLinearGradient(0, 40, 0, LOGO_H);
+  grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.55, '#f4f7fa'); grad.addColorStop(1, '#cfdbe6');
+  for (const p of placed) { fg.save(); fg.translate(p.x, p.y); fg.rotate(p.rot); fg.font = font(p.size); fg.textAlign = 'center'; fg.fillStyle = grad; fg.fillText(p.ch, 0, 0); fg.restore(); }
+  for (const e of ears) { earPath(fg, e); fg.fillStyle = '#ffffff'; fg.fill(); }
+  fg.globalCompositeOperation = 'source-atop';
+  for (const e of ears) { fg.save(); fg.translate(e.x, e.y); fg.rotate(e.tilt); fg.fillStyle = '#f7b3c2'; fg.beginPath(); fg.moveTo(-12, 12); fg.lineTo(0, -16); fg.lineTo(12, 12); fg.closePath(); fg.fill(); fg.restore(); }
+  fg.strokeStyle = 'rgba(150,170,190,0.55)'; fg.lineCap = 'round';
+  for (let i = 0; i < 70; i++) {
+    const x = hash(i * 1.7) * LOGO_W, y = 40 + hash(i * 2.9) * (LOGO_H - 80), l = 6 + hash(i * 4.1) * 22, a = (hash(i * 5.3) - 0.5) * 1.2;
+    fg.lineWidth = 1.5 + hash(i * 6.7) * 2.5;
+    fg.beginPath(); fg.moveTo(x, y); fg.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); fg.stroke();
+  }
+  fg.fillStyle = 'rgba(140,160,180,0.35)';
+  for (let i = 0; i < 160; i++) { fg.beginPath(); fg.arc(hash(i * 9.1) * LOGO_W, 40 + hash(i * 3.3) * (LOGO_H - 80), 1 + hash(i * 1.3) * 2.2, 0, 7); fg.fill(); }
+  g.drawImage(fc, 0, 0, LOGO_W, LOGO_H);
+  // "Vickie's" tag over the top-left of the logo
+  g.save(); g.translate(LOGO_W / 2 - 300, 48); g.rotate(-0.12);
+  g.font = "700 62px 'Dancing Script', 'Brush Script MT', cursive"; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.lineJoin = 'round'; g.strokeStyle = '#3b2414'; g.lineWidth = 14; g.strokeText("Vickie's", 0, 0);
+  g.strokeStyle = '#f2a91c'; g.lineWidth = 6; g.strokeText("Vickie's", 0, 0);
+  g.fillStyle = '#fff6e0'; g.fillText("Vickie's", 0, 0);
+  g.restore();
+  logoCanvas = c;
+}
+function drawLogo(cx, top, scale) {
+  buildLogo();
+  ctx.drawImage(logoCanvas, cx - LOGO_W * scale / 2, top, LOGO_W * scale, LOGO_H * scale);
+}
+
 function drawMenu() {
   ctx.fillStyle = 'rgba(30,50,60,0.22)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
-  text("Vickie's", W / 2, 110, 60, '#ffe9a8', { stroke: '#3a2160', strokeW: 12 });
-  text('ANGRY CATS', W / 2, 205, 124, '#ff7a59', { stroke: '#3a2160', strokeW: 20 });
-  text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 293, 30, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
+  drawLogo(W / 2, -6, 0.68);
+  text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 340, 28, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
   // the raccoon gang huddled together off to the right, away from the cats (further out on wide phones)
   const side = Math.max(0, uiShift) * 0.6;
@@ -1881,7 +1969,7 @@ function loop(now) {
 requestAnimationFrame(loop);
 
 // canvas text only uses a web font once it has been asked for
-if (document.fonts) for (const f of ["40px Bangers", "40px Chewy", "700 40px 'Dancing Script'", "700 40px Fredoka"]) document.fonts.load(f).catch(() => {});
+if (document.fonts) for (const f of ["40px Bangers", "40px Chewy", "700 40px 'Dancing Script'", "700 40px Fredoka", "40px 'Luckiest Guy'"]) document.fonts.load(f).catch(() => {});
 
 // Handy for testing: index.html?level=3 jumps straight in.
 const qLevel = parseInt(new URLSearchParams(location.search).get('level'), 10);

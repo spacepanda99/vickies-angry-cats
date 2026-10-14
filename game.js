@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 56;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 57;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -745,16 +745,18 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
   portals = lv.portals.map(q => ({ ...q, flap: 0 }));
-  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 420, text: LEVELS[i].intro, life: 170, big: true });
+  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 420, text: LEVELS[i].intro, life: 200, big: true });
   if (portals.length) popups.push({ x: fortCenter, y: 330, text: 'Magic cat flaps: in one, out the other!', life: 160, big: true });
   bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
   if (bubbles.length) popups.push({ x: fortCenter, y: 330, text: 'Zero gravity inside the bubbles!', life: 150, big: true });
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
   panning = null; panIdle = 999; introTimer = 80;
   reveal = null; shotRevealed = false;
+  const tip = !!LEVELS[i].intro && !LEVELS[i].fridge;      // levels with a tip: the camera stays on the fort long enough to read it
+  if (tip) introTimer = 200;
   if (LEVELS[i].fridge) { introTimer = 150; startReveal(35); }   // the camera lingers on the dark fort while the fridge opens
-  scheduleChatter([current, ...queue], LEVELS[i].fridge ? 140 : 70);   // plotting while the camera glides back from the fort
-  upBanner = { type: current, t: -(70 + (queue.length + 1) * 16 + 16) };   // then whose turn it is
+  scheduleChatter([current, ...queue], LEVELS[i].fridge ? 140 : tip ? 200 : 70);   // plotting while the camera glides back from the fort
+  upBanner = { type: current, t: -((tip ? 200 : 70) + (queue.length + 1) * 16 + 16) };   // then whose turn it is
   cam.x = clampCamX(fortCenter - viewW / 2); cam.y = CAM_TOP;
   state = 'play';
 }

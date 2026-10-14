@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 30;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 32;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -38,6 +38,7 @@ const MATS = {
   yarnball: { density: 0.006, fill: '#7fb3e6', edge: '#4a7fb3', points: 0 },                         // rolling boulder (unbreakable)
   shelf:  { fill: '#b07d4f', edge: '#7a4f2a', points: 0 },                                           // fixed to the wall
   ramp:   { fill: '#e2c69c', edge: '#a8875a', points: 0 },                                           // fixed cardboard slide
+  cage:   { density: 0.0015, health: 30, fill: 'rgba(225,235,250,0.3)', edge: '#7d8594', points: 0 },    // a kitten is locked inside
 };
 
 const CATS = {
@@ -47,7 +48,7 @@ const CATS = {
   // CeCe weighs a ton: she launches weak, lands short, then rolls like a bowling ball.
   cece: { name: 'CeCe', r: 70, density: 0.00553, restitution: 0.12, friction: 0.9, frictionAir: 0.0012, launch: 0.82, pullCurve: 0.9, rollDrag: 0.98, bumpDamp: 0.55,
           body: '#93826f', dark: '#3e342c', belly: '#fbfaf7', eye: '#b9b46a', patch: '#d9984f',
-          power: 'shake', hint: 'Tap to head shake! (again and again)' },
+          power: 'shake', hint: 'Tap for the head shake!' },
   cleo: { name: 'Cleo', r: 34, density: 0.004, restitution: 0.3, friction: 0.5,
           body: '#f0c99a', dark: '#c98f58', belly: '#fffdf8', eye: '#b5d39c', patch: '#e6ae74',
           power: 'prance', hint: 'Tap to prance!' },
@@ -88,7 +89,9 @@ function hut(lv, cx, base, w, h, postMat, beamMat) {
   block(lv, beamMat, cx, base - h - 10, w, 20);
   return base - h - 20;
 }
-function coon(lv, x, base, boss) { const r = boss ? 60 : 36; lv.raccoons.push({ x, y: base - r - 1, r, boss: !!boss }); }
+function coon(lv, x, base, boss, helmet) { const r = boss ? 60 : 36; lv.raccoons.push({ x, y: base - r - 1, r, boss: !!boss, helmet: !!helmet }); }
+// a kitten locked in a cage: break it to rescue her
+function cage(lv, x, base, size = 86) { block(lv, 'cage', x, base - size / 2, size, size); }
 function loot(lv, x, base, kind) { lv.loot.push({ x, y: base - 14, kind }); }
 // fixed pieces that never move or break: a wall shelf (centre x, top y) and a slide given by its corner points
 function shelf(lv, x, top, w) { lv.blocks.push({ mat: 'shelf', x, y: top + 9, w, h: 18, fixed: true }); return top; }
@@ -173,6 +176,18 @@ const LEVELS = [
     hut(lv, 1440, GROUND, 170, 150, 'stone', 'stone'); coon(lv, 1440, GROUND, true);
     loot(lv, 1400, GROUND, 'fish');
   } },
+  // Fan favourites: Rio's caged friends to set free, a Rube Goldberg chain (yarn ball, slide, catnip),
+  // helmet-wearing toughies, and a hidden golden egg (here a golden fish) for the bonus hunters.
+  { name: 'Kitten Rescue', cats: ['baby', 'cece', 'cleo'], build(lv) {
+    ramp(lv, [[900, GROUND], [900, 600], [1110, GROUND]]);
+    const top = shelf(lv, 872, 592, 80); yarnBall(lv, 875, top, 40);      // nudge it: it rolls into the catnip...
+    catnip(lv, 1135, GROUND);
+    cage(lv, 1220, GROUND);                                                 // ...which blows this cage open
+    const t1 = hut(lv, 1360, GROUND, 170, 120, 'stone', 'wood'); coon(lv, 1360, GROUND, false, true);
+    const t2 = hut(lv, 1360, t1, 140, 100, 'wood', 'glass'); coon(lv, 1360, t1);
+    coon(lv, 1318, t2, false, true); cage(lv, 1400, t2, 70);
+    const g = shelf(lv, 1490, 400, 70); loot(lv, 1490, g, 'goldfish');     // the secret
+  } },
 ];
 
 // ---------------------------------------------------------------- saved progress
@@ -182,6 +197,10 @@ let bestStars = {};
 try { bestStars = JSON.parse(localStorage.getItem(STORE_KEY)) || {}; } catch (e) { bestStars = {}; }
 function saveStars() { try { localStorage.setItem(STORE_KEY, JSON.stringify(bestStars)); } catch (e) { /* private mode */ } }
 const unlocked = i => i === 0 || (bestStars[i - 1] || 0) > 0;
+const GOLD_KEY = 'vickiesAngryCats.golden';
+let goldenFound = {};
+try { goldenFound = JSON.parse(localStorage.getItem(GOLD_KEY)) || {}; } catch (e) { goldenFound = {}; }
+function saveGolden() { try { localStorage.setItem(GOLD_KEY, JSON.stringify(goldenFound)); } catch (e) { /* private mode */ } }
 
 // ---------------------------------------------------------------- sound (synthesized, no files)
 
@@ -503,8 +522,8 @@ function makeFloat(f) {
 }
 function makeCoon(c) {
   const body = Bodies.circle(c.x, c.y, c.r, { density: 0.0025, friction: 0.7, restitution: 0.15, label: 'coon' });
-  const hp = c.boss ? 320 : 30;
-  body.game = { kind: 'coon', r: c.r, boss: c.boss, hp, maxHp: hp, blink: Math.random() * 200 };
+  const hp = c.boss ? 320 : c.helmet ? 75 : 30;   // a colander helmet makes them much tougher
+  body.game = { kind: 'coon', r: c.r, boss: c.boss, helmet: c.helmet, hp, maxHp: hp, blink: Math.random() * 200 };
   return body;
 }
 function makeLoot(l) {
@@ -512,6 +531,7 @@ function makeLoot(l) {
     ? Bodies.rectangle(l.x, l.y, 36, 18, { density: 0.0015, friction: 0.6, label: 'loot' })
     : Bodies.circle(l.x, l.y, 13, { density: 0.0015, friction: 0.6, label: 'loot' });
   body.game = { kind: 'loot', type: l.kind };
+  if (l.kind === 'goldfish') Body.setStatic(body, true);   // waits on its hidden perch until a cat touches it
   return body;
 }
 function makeCat(type, x, y, r) {
@@ -649,8 +669,7 @@ function usePower() {
   const c = flying[0], g = c.game;
   if (g.done || g.dead || flyTimer < 6) return;
   const t = CATS[g.type];
-  // CeCe can head-shake again and again (short cooldown); the others get one power per shot
-  if (t.power === 'shake') { if (g.shake > 12) return; } else powerUsed = true;
+  powerUsed = true;   // one power per shot
   if (t.power === 'split') {
     for (const ang of [-0.24, 0.24]) {
       const nb = makeCat('baby', c.position.x, c.position.y);
@@ -729,7 +748,8 @@ function step() {
     p.life--; p.x += p.vx; p.y += p.vy; if (p.vr) p.rot += p.vr;
     if (p.type === 'puff') { p.vx *= 0.94; p.vy *= 0.94; p.s *= 1.02; }
     else if (p.type === 'fur') { p.vx *= 0.95; p.vy = p.vy * 0.95 + 0.12; }
-    else if (p.type !== 'ring') p.vy += 0.35;
+    else if (p.type === 'heart') p.vy *= 0.98;
+    else if (p.type !== 'ring' && p.type !== 'kitten') p.vy += 0.35;
   }
   particles = particles.filter(p => p.life > 0);
   for (const p of popups) { p.life--; p.y -= 0.8; }
@@ -808,7 +828,17 @@ function step() {
       else if (g.kind === 'balloon') { Composite.remove(engine.world, g.rope); addScore(200, b.position, 'POP!'); poof(b.position, 5, 0.5); sfx.tone('square', 900, 200, 0.08, 0.12); }
       else if (g.kind === 'block') { addScore(MATS[g.mat].points, b.position); debris(b); sfx.crumble(g.mat); }
       else if (g.kind === 'coon') { addScore(g.boss ? 20000 : 5000, b.position); poof(b.position, g.boss ? 18 : 10, g.boss ? 1.6 : 1); sparkle(b.position, 6); sfx.pop(); }
+      else if (g.kind === 'loot' && g.collected && g.type === 'goldfish') {
+        addScore(10000, b.position, 'GOLDEN FISH! +10000'); sparkle(b.position, 24); sfx.ding(); sfx.ding();
+        goldenFound[levelIdx] = true; saveGolden();
+      }
       else if (g.kind === 'loot' && g.collected) { addScore(1000, b.position, g.type === 'fish' ? 'Treat saved! +1000' : 'Yarn saved! +1000'); sparkle(b.position, 10); sfx.ding(); }
+      else if (g.kind === 'block' && g.mat === 'cage') {
+        // the kitten inside is free: hearts, a happy mew, and she scampers off home
+        addScore(3000, b.position, 'Kitten rescued! +3000'); debris(b); sfx.crumble('glass'); sfx.cat(pick(CAT_SOUNDS.chatter.baby), 0.6, 0.15);
+        for (let i = 0; i < 8; i++) particles.push({ type: 'heart', x: b.position.x + rand(-20, 20), y: b.position.y - 10, vx: rand(-1.5, 1.5), vy: rand(-3, -1.5), s: rand(9, 15), life: 60, max: 60 });
+        particles.push({ type: 'kitten', x: b.position.x, y: GROUND - 22, vx: -7, vy: 0, s: 22, life: 160, max: 160 });
+      }
     }
     toRemove.length = 0;
     // a removed block can leave sleeping bodies floating in mid-air
@@ -1303,8 +1333,14 @@ function drawCoon(x, y, r, ang, g) {
   ctx.strokeStyle = '#2a2b30'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(-r * 0.2, r * 0.45); ctx.quadraticCurveTo(r * 0.02, r * 0.55, r * 0.26, r * 0.36); ctx.stroke();
   if (g && g.boss) { ctx.fillStyle = '#ffd23f'; ctx.fillRect(-r * 0.02, r * 0.47, r * 0.1, r * 0.1); }
-  // hat: beanie for the crew, top hat for the boss
-  if (g && g.boss) {
+  // hat: beanie for the crew, top hat for the boss, a kitchen colander for the tough ones
+  if (g && g.helmet) {
+    ctx.fillStyle = '#c3cad3'; ctx.beginPath(); ctx.arc(0, -r * 0.3, r * 0.86, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#7f8792'; ctx.lineWidth = r * 0.05; ctx.stroke();
+    ctx.fillStyle = '#7f8792';
+    for (const [hx, hy] of [[-0.45, -0.6], [-0.15, -0.8], [0.15, -0.8], [0.45, -0.6], [-0.3, -0.45], [0, -0.55], [0.3, -0.45]]) { ctx.beginPath(); ctx.arc(hx * r, hy * r, r * 0.05, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#9aa2ad'; ctx.fillRect(r * 0.8, -r * 0.42, r * 0.38, r * 0.1);   // handle
+  } else if (g && g.boss) {
     ctx.fillStyle = '#16171b';
     ctx.fillRect(-r * 0.8, -r * 0.92, r * 1.6, r * 0.16);
     ctx.fillRect(-r * 0.48, -r * 1.65, r * 0.96, r * 0.76);
@@ -1384,6 +1420,13 @@ function drawBlock(b) {
     ctx.fillStyle = '#2f7a2c'; ctx.beginPath(); ctx.ellipse(0, -3, 7, 12, 0.5, 0, 7); ctx.fill();
     ctx.strokeStyle = '#2f7a2c'; ctx.beginPath(); ctx.moveTo(-2, 6); ctx.lineTo(-6, 14); ctx.stroke();
     text('CATNIP', 0, h / 2 - 8, 9, '#ffffff');
+  } else if (g.mat === 'cage') {
+    // a kitten peeking out from behind bars
+    drawCat(0, h * 0.08, Math.min(w, h) * 0.3, 0, 'baby');
+    ctx.strokeStyle = '#6f7684'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+    for (let k = -2; k <= 2; k++) { ctx.beginPath(); ctx.moveTo(k * w / 5.2, -h / 2 + 4); ctx.lineTo(k * w / 5.2, h / 2 - 4); ctx.stroke(); }
+    ctx.lineCap = 'butt'; ctx.fillStyle = '#6f7684'; ctx.fillRect(-w / 2, -h / 2, w, 7); ctx.fillRect(-w / 2, h / 2 - 7, w, 7);
+    ctx.fillStyle = '#e5b33a'; ctx.beginPath(); ctx.arc(w * 0.3, h * 0.12, 7, 0, 7); ctx.fill();   // padlock
   } else if (g.mat === 'shelf') {
     ctx.fillStyle = m.edge;
     for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(s * (w / 2 - 14), h / 2); ctx.lineTo(s * (w / 2 - 14), h / 2 + 34); ctx.lineTo(s * (w / 2 - 44), h / 2); ctx.closePath(); ctx.fill(); }
@@ -1431,6 +1474,15 @@ function drawLoot(b) {
   ctx.translate(b.position.x, b.position.y); ctx.rotate(b.angle);
   const glow = 0.5 + 0.5 * Math.sin(frame * 0.08);
   ctx.shadowColor = `rgba(255,230,120,${0.5 + glow * 0.4})`; ctx.shadowBlur = 14;
+  if (b.game.type === 'goldfish') {
+    ctx.shadowColor = 'rgba(255,215,60,0.95)'; ctx.shadowBlur = 22;
+    ctx.fillStyle = '#ffcf33';
+    ctx.beginPath(); ctx.ellipse(-3, 0, 17, 10, 0, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(11, 0); ctx.lineTo(23, -10); ctx.lineTo(23, 10); ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0; ctx.fillStyle = '#b8860b'; ctx.beginPath(); ctx.arc(-13, -2, 2.2, 0, 7); ctx.fill();
+    ctx.restore();
+    return;
+  }
   if (b.game.type === 'fish') {
     ctx.fillStyle = '#ff9a3c';
     ctx.beginPath(); ctx.ellipse(-3, 0, 14, 8, 0, 0, 7); ctx.fill();
@@ -1589,6 +1641,12 @@ function drawWorld() {
       ctx.fillStyle = p.color; ctx.beginPath(); ctx.moveTo(-p.s, 0); ctx.quadraticCurveTo(0, -p.s * 0.35, p.s, 0); ctx.quadraticCurveTo(0, p.s * 0.2, -p.s, 0); ctx.fill();
       ctx.restore();
     } else if (p.type === 'chip') { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.fillStyle = p.color; ctx.fillRect(-p.s / 2, -p.s / 4, p.s, p.s / 2); ctx.restore(); }
+    else if (p.type === 'heart') {
+      ctx.fillStyle = '#ff6f91'; ctx.beginPath(); ctx.moveTo(p.x, p.y + p.s * 0.6);
+      ctx.bezierCurveTo(p.x - p.s * 1.2, p.y - p.s * 0.3, p.x - p.s * 0.4, p.y - p.s * 1.1, p.x, p.y - p.s * 0.35);
+      ctx.bezierCurveTo(p.x + p.s * 0.4, p.y - p.s * 1.1, p.x + p.s * 1.2, p.y - p.s * 0.3, p.x, p.y + p.s * 0.6); ctx.fill();
+    }
+    else if (p.type === 'kitten') { ctx.globalAlpha = 1; drawCat(p.x, p.y - Math.abs(Math.sin(p.life * 0.4)) * 14, p.s, Math.sin(p.life * 0.4) * 0.15, 'baby'); }
     else { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); starShape(0, 0, p.s, p.color); ctx.restore(); }
   }
   ctx.globalAlpha = 1;
@@ -1837,12 +1895,16 @@ function drawLogo(cx, top, scale) {
 
 function drawMenu() {
   ctx.fillStyle = 'rgba(30,50,60,0.22)'; ctx.fillRect(-uiShift - 50, -500, UW + 100, H + 1000);
-  drawLogo(W / 2, -6, 0.68);
-  text('Raccoon burglars stole the treats and toys. Get them back!', W / 2, 340, 28, '#fff', { stroke: '#3a2160', strokeW: 7, weight: 500 });
+  drawLogo(W / 2, -2, 0.97);
   const bob = k => Math.sin(frame * 0.05 + k) * 6;
   // the raccoon gang huddled together off to the right, away from the cats (further out on wide phones)
   const side = Math.max(0, uiShift) * 0.6;
-  ctx.save(); ctx.translate(side * 0.6 + 1380, MENU_FLOOR); ctx.scale(1.12, 1.12); ctx.translate(-1380, -MENU_FLOOR); drawHuddle(); ctx.restore();
+  ctx.save(); ctx.translate(-side * 0.5 + 215, MENU_FLOOR); ctx.scale(1.08, 1.08); ctx.translate(-1380, -MENU_FLOOR); drawHuddle(); ctx.restore();
+  // the tagline sits over the raccoons, who are the ones it's about
+  const tx = -side * 0.5 + 215;
+  for (const [i, line] of ['Raccoon burglars stole', 'the treats and toys.', 'Get them back!'].entries()) {
+    text(line, tx, 296 + i * 34, i === 2 ? 30 : 26, i === 2 ? '#ffe14d' : '#ffffff', { stroke: '#3a2160', strokeW: 7, weight: i === 2 ? 700 : 500 });
+  }
   // the three cats front and centre, bright-eyed
   // tap a cat and she hops and meows
   const hopOf = type => { const k = (frame - (menuHop[type] || -99)) / 24; return k >= 0 && k < 1 ? Math.sin(k * Math.PI) * 34 : 0; };
@@ -1850,16 +1912,16 @@ function drawMenu() {
     menuHop[type] = frame;
     if (!sfx.cat(pick(CAT_SOUNDS.chatter[type]), 0.65)) sfx.meow(type === 'baby' ? 1.25 : type === 'cece' ? 0.75 : 1);
   };
-  for (const [type, x, y, r] of [['cece', 800, 530, 132], ['baby', 538, 568, 84], ['cleo', 1065, 565, 92]]) {
+  for (const [type, x, y, r] of [['cece', 800, 612, 132], ['baby', 548, 650, 84], ['cleo', 1052, 646, 92]]) {
     uiButtons.push({ x: x + uiShift, y, w: r * 2, h: r * 2.2, action: tapCat(type) });
   }
-  drawCat(800, 530 + bob(1) - hopOf('cece'), 132, 0, 'cece', { bright: true });
-  drawCat(538, 568 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', { bright: true });
-  drawCat(1065, 565 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', { bright: true });
-  nameText('baby', 538, 690, 66);
-  nameText('cece', 800, 712, 74);
-  nameText('cleo', 1065, 690, 78);
-  button('PLAY', W / 2, 818, 280, 84, '#4caf6a', () => { state = 'levels'; });
+  drawCat(800, 612 + bob(1) - hopOf('cece'), 132, 0, 'cece', { bright: true });
+  drawCat(548, 650 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', { bright: true });
+  drawCat(1052, 646 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', { bright: true });
+  nameText('baby', 548, 774, 62);
+  nameText('cece', 800, 800, 70);
+  nameText('cleo', 1052, 774, 72);
+  button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => { state = 'levels'; });
   text('v' + GAME_VERSION, -uiShift + 30, 875, 18, 'rgba(255,255,255,0.8)', { align: 'left', stroke: 'rgba(0,0,0,0.3)', strokeW: 4, weight: 500 });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
@@ -1872,8 +1934,8 @@ function drawLevels() {
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
   LEVELS.forEach((lv, i) => {
-    const col = i % 5, row = Math.floor(i / 5);
-    const x = W / 2 + (col - 2) * 240, y = 335 + row * 260, w = 215, h = 210;
+    const col = i % 6, row = Math.floor(i / 6);
+    const x = W / 2 + (col - 2.5) * 215, y = 335 + row * 260, w = 195, h = 210;
     const open = unlocked(i);
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(x - w / 2, y - h / 2 + 8, w, h, 24); ctx.fill();
     ctx.fillStyle = open ? '#fff6e6' : '#9b93ad'; rr(x - w / 2, y - h / 2, w, h, 24); ctx.fill();
@@ -1882,6 +1944,7 @@ function drawLevels() {
       text(String(i + 1), x, y - 30, 70, '#ff7a59', { stroke: '#5b3a1e', strokeW: 8 });
       text(lv.name, x, y + 30, 19, '#5b3a1e', { weight: 500 });
       const s = bestStars[i] || 0;
+      if (goldenFound[i]) drawLoot({ position: { x: x + 70, y: y - 78 }, angle: -0.3, game: { type: 'goldfish' } });
       for (let k = 0; k < 3; k++) starShape(x + (k - 1) * 38, y + 68, 15, k < s ? '#ffd23f' : '#e4dccd', k < s ? '#b8860b' : '#cfc4b1');
       uiButtons.push({ x: x + uiShift, y, w, h, action: () => loadLevel(i) });
     } else {

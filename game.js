@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 67;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 68;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1108,7 +1108,7 @@ function catchLaser() {
 // ---- cat Easter eggs: a bird at the window, a hairball, a purr, a toy mouse, a cat in the moon
 const BIRD = { x: 520, y: 500 };   // perched on the first window's sill (that layer scrolls slower than the room)
 const birdPos = () => ({ x: cam.x * (1 - FAR_P) + BIRD.x + bird.ox, y: BIRD.y + bird.oy });
-const moonPos = () => ({ x: WINDOWS[0].wx + 300 + 0.97 * cam.x, y: WINDOWS[0].wy + 265 });   // the moon barely moves on screen: the windows slide past it
+const moonPos = () => ({ x: WINDOWS[0].wx + 300 + 0.1 * cam.x, y: WINDOWS[0].wy + 265 });   // the moon drifts a hair against the window frame
 const inWindow = x => WINDOWS.some(w => x > w.wx + 10 && x < w.wx + w.ww - 10);
 function chatterAll(sym) { [current, ...queue].filter(Boolean).forEach((type, who) => chatter.push({ type, who, t: 1 + who * 6, life: CHATTER_LIFE, sym })); }
 function squeakMouse(m) {
@@ -2411,7 +2411,7 @@ const hasFridge = () => LEVELS[levelIdx] && LEVELS[levelIdx].fridge;
 // window glass at night: deep blue sky, the moon, twinkling stars, a dark garden and a few fireflies
 function nightWindows() {
   // the view outside slides slowly past the fixed windows (see OUT_Q in backdrop.js); NQ is how much of the camera each layer follows
-  const NQ = { star: 0.03, moon: 0.03, hill: 0.12, fly: 0.2 }, sh = q => (1 - q) * cam.x, SP = 1200;
+  const NQ = { star: 0.9, moon: 0.9, hill: 0.94, fly: 0.96 }, sh = q => (1 - q) * cam.x, SP = 1200;
   const mod = (v, m) => ((v % m) + m) % m;
   const moon = moonPos();
   for (const [i, w] of WINDOWS.entries()) {

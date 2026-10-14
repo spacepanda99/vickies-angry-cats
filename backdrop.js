@@ -5,7 +5,7 @@
 // Uses GROUND, WORLD_W and hash() from game.js (only called after game.js has loaded).
 
 const BACKDROP = { top: -400, bottom: 1000, far: null, mid: null, front: null };
-const FAR_P = 1, MID_P = 1;                // how much of the camera movement each layer follows: 1 = fixed in the room (the walls, windows, portraits and furniture stay put; only the camera moves)
+const FAR_P = 1, MID_P = 0.985;                // how much of the camera movement each layer follows: 1 = fixed in the room (the wall, windows and portraits stay put; the furniture and plants, which stand right against the wall, drift by a hair)
 
 function makeLayer(w, scale) {
   const c = document.createElement('canvas');
@@ -292,9 +292,9 @@ function initBackdrop() {
 }
 
 // The view outside the windows. The room (walls, windows, furniture) stays fixed in the world; only what's out there slides
-// as the camera moves, each layer at its own slow speed (the sun barely moves, the nearer palms drift a little more).
-// OUT_Q is how much of the camera's movement a layer follows on screen (1 = fixed in the world, 0 = stuck to the screen).
-const OUT_Q = { sun: 0.03, cloud: 0.06, hill: 0.12, palm: 0.2 };
+// as the camera moves, each layer at its own slow speed (the distant sun and clouds drift a touch more than the nearer palms).
+// OUT_Q is how much of the camera's movement a layer follows (1 = fixed in the world like the wall; the lower, the more it slides).
+const OUT_Q = { sun: 0.9, cloud: 0.92, hill: 0.94, palm: 0.96 };   // very subtle: a few percent of the camera's movement
 function drawOutsideDay(camX) {
   const tod = BACKDROP.tod || 0, wy = 110, ww = 420, wh = 400, shift = q => (1 - q) * camX;
   const palmCol = keyed(TOD.palm, tod), palmCol2 = hexMix(palmCol, '#ffffff', 0.08);

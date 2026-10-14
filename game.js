@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 37;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 38;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -39,7 +39,7 @@ const MATS = {
   shelf:  { fill: '#b07d4f', edge: '#7a4f2a', points: 0 },                                           // fixed to the wall
   ramp:   { fill: '#e2c69c', edge: '#a8875a', points: 0 },                                           // fixed cardboard slide
   cage:   { density: 0.0015, health: 30, fill: 'rgba(225,235,250,0.3)', edge: '#7d8594', points: 0 },    // a kitten is locked inside
-  mug:    { density: 0.0012, health: 14, fill: '#f7f3ea', edge: '#8f8676', points: 1500 },             // Easter egg: knock it off!
+  mug:    { density: 0.0012, health: 14, fill: '#f7f3ea', edge: '#8f8676', points: 250 },              // Easter egg: swipe it off yourself
   cucumber: { density: 0.0012, fill: '#5aa846', edge: '#2f6b28', points: 0 },                         // Easter egg: cats vs cucumbers (unbreakable)
 };
 
@@ -106,12 +106,20 @@ function decoy(lv, x) { block(lv, 'decoy', x, GROUND - 70, 92, 140); }
 function floatie(lv, x, y) { lv.floats.push({ x, y }); }
 // a zero-gravity bubble (Angry Birds Space): anything inside floats; knock it out and it falls
 function bubble(lv, x, y, r) { lv.bubbles.push({ x, y, r }); }
-// a mug sitting on something. Cats knock things off tables: break it for a bonus
+// a mug sitting on something. Cats knock things off tables, and so can you: swipe it off with a finger
+// for a small secret bonus (a cat knocking it over doesn't count)
 function mug(lv, x, base) { block(lv, 'mug', x, base - 15, 26, 30); }
 // later-level Easter eggs: a cucumber on the floor (a cat that touches it leaps in fright),
 // and a patch of sunshine where a cat that comes to rest curls up for a nap
 function cucumber(lv, x) { block(lv, 'cucumber', x, GROUND - 10, 70, 20); }
 function sunbeam(lv, x, w) { lv.sunbeam = { x, w }; }
+// a pair of magic cat flaps (Angry Birds Seasons' portals): whatever goes in one comes out the other,
+// same speed, same heading
+const PORTAL_R = 52;
+function portal(lv, ax, ay, bx, by) {
+  const n = lv.portals.length;
+  lv.portals.push({ x: ax, y: ay, link: n + 1, color: '#b06cff', glow: '176,108,255' }, { x: bx, y: by, link: n, color: '#ff9a3c', glow: '255,154,60' });
+}
 
 // Every level gets each cat exactly once.
 const LEVELS = [
@@ -212,6 +220,18 @@ const LEVELS = [
     hut(lv, 900, GROUND, 110, 80, 'glass', 'wood'); coon(lv, 900, GROUND);
     const t = hut(lv, 1330, GROUND, 170, 110, 'stone', 'wood'); coon(lv, 1330, GROUND); coon(lv, 1330, t);
     bubble(lv, 1490, 330, 50); loot(lv, 1490, 344, 'goldfish');            // the secret, up in its own bubble
+  } },
+  // Magic portals from Angry Birds Seasons, done as a pair of cat flaps. The raccoons are holed up behind
+  // tall stone walls; fly through the purple flap and burst out of the orange one inside their fort.
+  { name: 'Magic Cat Flaps', cats: ['baby', 'cleo', 'cece'], build(lv) {
+    portal(lv, 860, 560, 1065, 600);
+    block(lv, 'stone', 1010, GROUND - 150, 30, 300);                        // the walls: too tough to bash through
+    block(lv, 'stone', 1480, GROUND - 150, 30, 300);
+    hut(lv, 1110, GROUND, 120, 100, 'wood', 'glass'); coon(lv, 1110, GROUND);
+    catnip(lv, 1215, GROUND);
+    const t = hut(lv, 1340, GROUND, 150, 120, 'glass', 'wood'); coon(lv, 1340, GROUND, false, true); coon(lv, 1340, t);
+    loot(lv, 1440, GROUND, 'fish');
+    const g = shelf(lv, 1440, 430, 70); loot(lv, 1440, g, 'goldfish');     // the secret: come out of the orange flap climbing steeply
   } },
 ];
 
@@ -497,6 +517,7 @@ function chatterBubble(who, x, y) {
 }
 let menuHop = {};                   // home screen: when each cat was last tapped
 let bubbles = [];                   // zero-gravity zones in this level
+let portals = [];                   // magic cat flaps in this level
 // Easter eggs on every level: a cardboard box to sit in, and a red laser dot that shows up while you aim
 const BOX = { x: 1000, w: 110, h: 64 };
 let boxCat = null;                  // which cat climbed into the box ("if I fits, I sits")
@@ -581,9 +602,9 @@ function makeCat(type, x, y, r) {
 function loadLevel(i) {
   levelIdx = i;
   newEngine();
-  const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [] };
+  const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [], portals: [] };
   LEVELS[i].build(lv);
-  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats, lv.bubbles]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
+  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats, lv.bubbles, lv.portals]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
   Composite.add(engine.world, Bodies.rectangle(WORLD_W / 2, GROUND + 60, WORLD_W * 3, 120, { isStatic: true, friction: 0.9, label: 'ground' }));
   for (const b of lv.blocks) Composite.add(engine.world, makeBlock(b));
   for (const c of lv.raccoons) Composite.add(engine.world, makeCoon(c));
@@ -599,6 +620,8 @@ function loadLevel(i) {
   settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
+  portals = lv.portals.map(q => ({ ...q, flap: 0 }));
+  if (portals.length) popups.push({ x: fortCenter, y: 330, text: 'Magic cat flaps: in one, out the other!', life: 160, big: true });
   bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
   if (bubbles.length) popups.push({ x: fortCenter, y: 330, text: 'Zero gravity inside the bubbles!', life: 150, big: true });
   // Angry Birds style intro: start looking at the fort, then glide back to the slingshot
@@ -795,6 +818,33 @@ function sitInBox(b) {
   eggBonus(g.type === 'cece' ? 'If I fits... I sits!' : 'If I fits, I sits!', 2500, { x: BOX.x, y: GROUND - BOX.h - 20 }, g.type === 'cece' ? '(barely)' : null);
   sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6, 0.1);
 }
+// Magic cat flaps: anything that moves into one pops out of its partner at the same speed and heading.
+// It can't go back in the flap it came out of until it has left it, so nothing ping-pongs.
+function updatePortals() {
+  for (const q of portals) if (q.flap > 0) q.flap--;
+  if (!portals.length) return;
+  for (const b of bodies()) {
+    const g = b.game;
+    if (b.isStatic || b.isSleeping || !g || g.kind === 'balloon') continue;
+    if (g.portalOut != null) {
+      const o = portals[g.portalOut];
+      if (Math.hypot(b.position.x - o.x, b.position.y - o.y) > PORTAL_R + 6) g.portalOut = null;
+    }
+    for (let i = 0; i < portals.length; i++) {
+      const q = portals[i];
+      if (i === g.portalOut || Math.hypot(b.position.x - q.x, b.position.y - q.y) > PORTAL_R * 0.8) continue;
+      const out = portals[q.link], v = { x: b.velocity.x, y: b.velocity.y };
+      sparkle({ x: q.x, y: q.y }, 8);
+      Body.setPosition(b, { x: out.x, y: out.y }); Body.setVelocity(b, v);
+      g.portalOut = q.link; q.flap = out.flap = 24;
+      sparkle({ x: out.x, y: out.y }, 10);
+      if (g.trail) g.trail.length = 0;
+      sfx.tone('sine', 380, 1500, 0.22, 0.09); sfx.tone('triangle', 1500, 600, 0.18, 0.05, 0.12);
+      break;
+    }
+  }
+}
+
 // Every Easter egg: points, a big '+' over the spot, and a badge across the screen with a happy jingle
 function eggBonus(title, pts, pos, sub) {
   score += pts;
@@ -903,6 +953,7 @@ function step() {
     Body.setVelocity(b, Vector.mult(b.velocity, b.game && b.game.kind === 'cat' ? 0.996 : 0.99));
     Body.setAngularVelocity(b, b.angularVelocity * 0.98);
   }
+  updatePortals();
   updateLaser();
   if (frame % 6 === 0) for (const b of bodies()) {
     const g = b.game;
@@ -958,7 +1009,10 @@ function step() {
       Composite.remove(engine.world, b);
       const g = b.game;
       if (g.kind === 'block' && MATS[g.mat].explodes) { addScore(MATS[g.mat].points, b.position, 'KABOOM!'); catnipBoom(b.position); }
-      else if (g.kind === 'block' && g.mat === 'mug') { eggBonus('Oops! Knocked it off!', MATS.mug.points, b.position, 'Cats will be cats'); debris(b); sfx.crumble('glass'); sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.2); }
+      else if (g.kind === 'block' && g.mat === 'mug') {
+        debris(b); sfx.crumble('glass');
+        if (g.swiped) { eggBonus('You knocked it off!', MATS.mug.points, b.position, 'Very cat of you'); sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.2); }
+      }
       else if (g.kind === 'block' && g.mat === 'decoy') { addScore(3000, b.position, 'It was a cardboard decoy!'); debris(b); sfx.crumble('decoy'); }
       else if (g.kind === 'balloon') { Composite.remove(engine.world, g.rope); addScore(200, b.position, 'POP!'); poof(b.position, 5, 0.5); sfx.tone('square', 900, 200, 0.08, 0.12); }
       else if (g.kind === 'block') { addScore(MATS[g.mat].points, b.position); debris(b); sfx.crumble(g.mat); }
@@ -1094,15 +1148,36 @@ canvas.addEventListener('pointerdown', e => {
     if (i >= 0) { petCat(i, spots[i]); return; }
   }
   if (phase === 'flying') { usePower(); return; }
+  if (grabMug(e, p)) return;
   // anywhere else: drag the background to look around
   introTimer = 0;
   panning = { sx: e.clientX, cx: cam.x };
 });
+// put a finger on a mug and flick it sideways: it gets batted off whatever it's sitting on, the way a cat would
+let mugGrab = null;
+function grabMug(e, p) {
+  const m = bodies().find(b => b.game && b.game.mat === 'mug' && !b.game.dead && Vector.magnitude(Vector.sub(b.position, p)) < 34);
+  if (!m) return false;
+  mugGrab = { m, x: e.clientX };
+  return true;
+}
+function flickMug(e) {
+  const dx = (e.clientX - mugGrab.x) * dpr / worldScale;
+  if (Math.abs(dx) < 8) return;
+  const m = mugGrab.m; mugGrab = null;
+  if (m.game.dead) return;
+  Sleeping.set(m, false);
+  Body.setVelocity(m, { x: dx > 0 ? 6 : -6, y: -3 });
+  Body.setAngularVelocity(m, dx > 0 ? 0.2 : -0.2);
+  m.game.swiped = true;
+}
 canvas.addEventListener('pointermove', e => {
+  if (mugGrab) { flickMug(e); return; }
   if (dragging) updatePull(toWorld(e));
   else if (panning) { cam.x = clampCamX(panning.cx - (e.clientX - panning.sx) * dpr / worldScale); panIdle = 0; }
 });
 function release() {
+  mugGrab = null;
   if (panning) { panning = null; return; }
   if (!dragging) return;
   dragging = false;
@@ -1795,7 +1870,12 @@ function drawTrajectory() {
   const v0 = launchVel(current, pull);
   let x = SLING.x + pull.x, y = SLING.y + pull.y, vx = v0.x, vy = v0.y;
   const fa = 1 - (CATS[current].frictionAir || 0.004);
+  let warped = false;
   for (let i = 1; i <= 70; i++) {
+    if (!warped) {
+      const q = portals.find(o => Math.hypot(x - o.x, y - o.y) < PORTAL_R * 0.8);
+      if (q) { x = portals[q.link].x; y = portals[q.link].y; warped = true; }
+    }
     const z = inBubble(x, y);
     if (z) { vx *= 0.996; vy *= 0.996; }
     vx *= fa; vy = vy * fa + (z ? 0 : GRAV_STEP); x += vx; y += vy;
@@ -1834,6 +1914,30 @@ function drawBox() {
   for (const sgn of [-1, 1]) { ctx.beginPath(); ctx.moveTo(x + sgn * w / 2, top); ctx.lineTo(x + sgn * (w / 2 + 30), top - 12); ctx.lineTo(x + sgn * (w / 2 + 26), top + 12); ctx.closePath(); ctx.fill(); ctx.stroke(); }
   ctx.fillStyle = 'rgba(240,225,190,0.7)'; ctx.fillRect(x - 6, top, 12, BOX.h);   // tape
   text('FRAGILE', x, top + BOX.h * 0.6, 13, '#b0473a', { weight: 700 });
+}
+function drawPortals() {
+  for (const q of portals) {
+    const r = PORTAL_R;
+    ctx.save(); ctx.translate(q.x, q.y);
+    const gr = ctx.createRadialGradient(0, 0, r * 0.2, 0, 0, r * 1.5);
+    gr.addColorStop(0, `rgba(${q.glow},0.35)`); gr.addColorStop(1, `rgba(${q.glow},0)`);
+    ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(0, 0, r * 1.5, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(30,18,50,0.55)'; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.72, r, 0, 0, 7); ctx.fill();
+    // the flap swings when something goes through, and sways a little otherwise
+    const sw = q.flap > 0 ? Math.sin(q.flap * 0.55) * (q.flap / 24) * 1.2 : Math.sin(frame * 0.05 + q.x) * 0.08;
+    ctx.save(); ctx.translate(0, -r * 0.62); ctx.scale(1, Math.max(0.15, Math.cos(sw)));
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; rr(-r * 0.46, 0, r * 0.92, r * 1.2, r * 0.25); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = q.color;                                                // paw print on the flap
+    ctx.beginPath(); ctx.ellipse(0, r * 0.72, r * 0.18, r * 0.14, 0, 0, 7); ctx.fill();
+    for (const [tx, ty] of [[-0.2, 0.46], [-0.07, 0.4], [0.07, 0.4], [0.2, 0.46]]) { ctx.beginPath(); ctx.arc(tx * r, ty * r, r * 0.065, 0, 7); ctx.fill(); }
+    ctx.restore();
+    // glowing frame with a slow swirl of dashes
+    ctx.strokeStyle = q.color; ctx.lineWidth = 8; ctx.beginPath(); ctx.ellipse(0, 0, r * 0.72, r, 0, 0, 7); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 3; ctx.setLineDash([10, 12]); ctx.lineDashOffset = -frame * 0.8;
+    ctx.beginPath(); ctx.ellipse(0, 0, r * 0.84, r * 1.12, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+    ctx.restore();
+  }
 }
 function drawSunbeam() {
   if (!sun) return;
@@ -1902,6 +2006,7 @@ function drawWorld() {
   const list = bodies().filter(b => b.game);
   const order = { block: 0, loot: 1, balloon: 2, coon: 3, cat: 4 };
   drawBubbles();
+  drawPortals();
   // balloon strings, drawn behind everything on the platform
   ctx.strokeStyle = 'rgba(80,80,90,0.7)'; ctx.lineWidth = 2;
   for (const f of floats) for (const bl of f.balloons) {
@@ -2279,8 +2384,8 @@ function drawLevels() {
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
   LEVELS.forEach((lv, i) => {
-    const col = i % 6, row = Math.floor(i / 6);
-    const x = W / 2 + (col - 2.5) * 215, y = 335 + row * 260, w = 195, h = 210;
+    const col = i % 7, row = Math.floor(i / 7);
+    const x = W / 2 + (col - 3) * 215, y = 335 + row * 260, w = 195, h = 210;
     const open = unlocked(i);
     ctx.fillStyle = 'rgba(0,0,0,0.3)'; rr(x - w / 2, y - h / 2 + 8, w, h, 24); ctx.fill();
     ctx.fillStyle = open ? '#fff6e6' : '#9b93ad'; rr(x - w / 2, y - h / 2, w, h, 24); ctx.fill();

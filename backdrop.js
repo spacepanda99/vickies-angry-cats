@@ -20,6 +20,27 @@ function haze(L, color) {
   g.save(); g.globalCompositeOperation = 'source-atop'; g.fillStyle = color;
   g.fillRect(0, BACKDROP.top, L.w, BACKDROP.bottom - BACKDROP.top); g.restore();
 }
+// Time of day, 0 = high noon (level 1) to 1 = sunset (level 14). Each palette is a few keyframes.
+function hexMix(a, c, k) {
+  const pa = parseInt(a.slice(1), 16), pc = parseInt(c.slice(1), 16), ch = (v, s) => (v >> s) & 255;
+  const m = s => Math.round(ch(pa, s) + (ch(pc, s) - ch(pa, s)) * k);
+  return '#' + ((1 << 24) | (m(16) << 16) | (m(8) << 8) | m(0)).toString(16).slice(1);
+}
+function keyed(stops, t) {
+  for (let i = 1; i < stops.length; i++) if (t <= stops[i][0]) { const [t0, c0] = stops[i - 1], [t1, c1] = stops[i]; return hexMix(c0, c1, (t - t0) / (t1 - t0)); }
+  return stops[stops.length - 1][1];
+}
+const TOD = {
+  skyTop:    [[0, '#7fd0f5'], [0.5, '#8cc4ec'], [0.8, '#7f9ad6'], [1, '#5560b0']],
+  skyLow:    [[0, '#e2f6fb'], [0.5, '#fbeac6'], [0.8, '#ffc28c'], [1, '#ff9a62']],
+  sun:       [[0, '#fff8cc'], [0.5, '#ffe58a'], [0.8, '#ffb35c'], [1, '#ff7a45']],
+  cloud:     [[0, '#ffffff'], [0.6, '#fff2dc'], [1, '#ffc6b8']],
+  hill:      [[0, '#b7e4cc'], [0.6, '#a9cfae'], [1, '#6f7f86']],
+  hillDark:  [[0, '#8fd0ad'], [0.6, '#86b893'], [1, '#55636e']],
+  palm:      [[0, '#7cc49d'], [0.6, '#79ad86'], [1, '#4b5864']],
+  beam:      [[0, '#fffce1'], [0.6, '#ffefc0'], [1, '#ffb27a']],
+  haze:      [[0, '#e8f6f2'], [0.6, '#f6eedd'], [1, '#ffd4b8']],
+};
 function blob(g, x, y, r) { g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
 function cloud(g, x, y, s) { for (const [dx, dy, r] of [[0, 0, 22], [24, -10, 26], [52, 0, 20], [26, 8, 22]]) blob(g, x + dx * s, y + dy * s, r * s); }
 function palm(g, x, base, h, color) {
@@ -33,7 +54,7 @@ function palm(g, x, base, h, color) {
   }
 }
 
-function buildFar() {
+function buildFar(tod = 0) {
   const L = makeLayer(1800, 1), g = L.g, W = L.w;
   // wall
   let gr = g.createLinearGradient(0, BACKDROP.top, 0, GROUND);
@@ -59,19 +80,30 @@ function buildFar() {
   for (const wx of [230, 1060]) {
     const wy = 110, ww = 420, wh = 400;
     gr = g.createLinearGradient(0, wy, 0, wy + wh);
-    gr.addColorStop(0, '#9fdcf3'); gr.addColorStop(1, '#e2f6fb');
+    gr.addColorStop(0, keyed(TOD.skyTop, tod)); gr.addColorStop(1, keyed(TOD.skyLow, tod));
     g.fillStyle = gr; g.fillRect(wx, wy, ww, wh);
-    g.fillStyle = 'rgba(255,255,255,0.95)';
+    // the sun: high in the left window at noon, sinking toward the hills by sunset (behind them at the very end)
+    if (wx === 230) {
+      const sx = wx + 130 - tod * 30, sy = wy + 200 + tod * 78, sr = 34 + tod * 10, sc = keyed(TOD.sun, tod);   // y range is the part of the window you can see in play
+      g.save(); g.beginPath(); g.rect(wx, wy, ww, wh); g.clip();
+      const sg = g.createRadialGradient(sx, sy, sr * 0.5, sx, sy, sr * (3 + tod * 2));
+      sg.addColorStop(0, sc + 'cc'); sg.addColorStop(1, sc + '00');
+      g.fillStyle = sg; g.beginPath(); g.arc(sx, sy, sr * (3 + tod * 2), 0, 7); g.fill();
+      g.fillStyle = sc; g.beginPath(); g.arc(sx, sy, sr, 0, 7); g.fill();
+      g.restore();
+    }
+    g.fillStyle = keyed(TOD.cloud, tod); g.globalAlpha = 0.95;
     cloud(g, wx + 70, wy + 80, 1.1); cloud(g, wx + 260, wy + 50, 0.8); cloud(g, wx + 300, wy + 150, 0.6);
-    g.fillStyle = '#b7e4cc';
+    g.globalAlpha = 1;
+    g.fillStyle = keyed(TOD.hill, tod);
     g.beginPath(); g.moveTo(wx, wy + wh);
     for (let x = 0; x <= ww; x += 20) g.lineTo(wx + x, wy + wh - 120 - Math.sin(x / 60 + wx) * 30);
     g.lineTo(wx + ww, wy + wh); g.closePath(); g.fill();
-    g.fillStyle = '#8fd0ad';
+    g.fillStyle = keyed(TOD.hillDark, tod);
     for (const [dx, r] of [[60, 46], [130, 34], [330, 52], [390, 30]]) blob(g, wx + dx, wy + wh - 70, r);
-    palm(g, wx + 210, wy + wh - 20, 170, '#7cc49d');
-    palm(g, wx + 280, wy + wh - 10, 120, '#86caa5');
-    g.fillStyle = '#9ad7b5'; g.fillRect(wx, wy + wh - 40, ww, 40);
+    palm(g, wx + 210, wy + wh - 20, 170, keyed(TOD.palm, tod));
+    palm(g, wx + 280, wy + wh - 10, 120, hexMix(keyed(TOD.palm, tod), '#ffffff', 0.08));
+    g.fillStyle = keyed(TOD.hill, tod); g.fillRect(wx, wy + wh - 40, ww, 40);
     // frame, bars, sill
     g.strokeStyle = '#ffffff'; g.lineWidth = 18; g.strokeRect(wx, wy, ww, wh);
     g.lineWidth = 9;
@@ -87,8 +119,10 @@ function buildFar() {
     }
     g.fillStyle = '#e3c58f'; g.fillRect(wx - 100, wy - 60, ww + 200, 10);
     // soft sunbeams falling into the room
-    g.fillStyle = 'rgba(255,252,225,0.18)';
-    g.beginPath(); g.moveTo(wx + 20, wy + 20); g.lineTo(wx + ww - 20, wy + 20); g.lineTo(wx + ww + 260, GROUND); g.lineTo(wx + 160, GROUND); g.closePath(); g.fill();
+    g.fillStyle = keyed(TOD.beam, tod); g.globalAlpha = 0.18 + tod * 0.08;
+    const reach = 260 + tod * 380;
+    g.beginPath(); g.moveTo(wx + 20, wy + 20); g.lineTo(wx + ww - 20, wy + 20); g.lineTo(wx + ww + reach, GROUND); g.lineTo(wx + 160 + tod * 260, GROUND); g.closePath(); g.fill();
+    g.globalAlpha = 1;
   }
   // a couple of pastel pictures between the windows
   const pic = (x, y, w, h, sky, hill) => {
@@ -99,7 +133,8 @@ function buildFar() {
   pic(735, 200, 150, 120, '#ffe2c4', '#f6b48f');
   pic(760, 360, 100, 80, '#d9e8ff', '#a9c4f0');
   pic(1580, 230, 140, 170, '#ffeec9', '#a8d9a0');
-  haze(L, 'rgba(232,246,242,0.35)');
+  const hz = parseInt(keyed(TOD.haze, tod).slice(1), 16);
+  haze(L, `rgba(${hz >> 16},${(hz >> 8) & 255},${hz & 255},0.35)`);
   return L;
 }
 
@@ -187,8 +222,14 @@ function buildFront() {
   return L;
 }
 
+// rebuild the far wall (windows, sun, sky) for a new time of day; cheap enough to do once per level
+function setBackdropTime(t) {
+  if (BACKDROP.far && Math.abs(t - (BACKDROP.tod || 0)) < 0.001) return;
+  BACKDROP.tod = t; BACKDROP.far = buildFar(t);
+}
 function initBackdrop() {
-  BACKDROP.far = buildFar();
+  BACKDROP.tod = 0;
+  BACKDROP.far = buildFar(0);
   BACKDROP.mid = buildMid();
   BACKDROP.front = buildFront();
 }

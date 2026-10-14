@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 51;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 52;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -688,8 +688,11 @@ function makeCat(type, x, y, r) {
   return body;
 }
 
+// the day goes by as you play: high noon on level 1, sunset by level 14, night after that
+const levelTime = i => LEVELS[i].night ? 1 : Math.min(1, i / 13);
 function loadLevel(i) {
   levelIdx = i;
+  setBackdropTime(levelTime(i));
   newEngine();
   const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [], portals: [], vacs: [], swings: [] };
   LEVELS[i].build(lv);
@@ -3057,6 +3060,8 @@ function render() {
   } else {
     ctx.setTransform(worldScale, 0, 0, worldScale, -cam.x * worldScale, -cam.y * worldScale);
     drawBackdrop(cam.x);
+    const tod = levelTime(levelIdx);
+    if (!isNight() && tod > 0.4) { ctx.fillStyle = `rgba(255,140,70,${(0.09 * (tod - 0.4) / 0.6).toFixed(3)})`; ctx.fillRect(cam.x - 50, BACKDROP.top, viewW + 100, BACKDROP.bottom - BACKDROP.top); }
     drawWorld();
     setUI();
     drawHUD();

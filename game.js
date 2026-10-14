@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 32;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 33;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -540,6 +540,7 @@ function makeCat(type, x, y, r) {
     density: t.density, friction: t.friction, restitution: t.restitution, frictionAir: t.frictionAir || 0.004,
     label: 'cat', collisionFilter: { group: -1 } });   // cats never hit each other (clones!)
   body.game = { kind: 'cat', type, r: r || t.r, rest: 0, mult: 1, done: false, trail: [] };
+  if (type !== 'cece') Body.setInertia(body, Infinity);   // Baby and Cleo fly posed, they don't tumble (CeCe rolls)
   return body;
 }
 
@@ -657,7 +658,7 @@ function launch() {
   } else {
     Body.setVelocity(body, launchVel(current, pull));
   }
-  Body.setAngularVelocity(body, snapped ? 0.02 : -pull.x * 0.0012);
+  if (current === 'cece') Body.setAngularVelocity(body, snapped ? 0.02 : -pull.x * 0.0012);   // only CeCe rolls
   Composite.add(engine.world, body);
   if (!sfx.cat(CAT_SOUNDS.launch[current], 0.7)) sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.75 : 1);
   flying = [body]; current = null; phase = 'flying'; powerUsed = false; flyTimer = 0;
@@ -1287,6 +1288,41 @@ function drawCleo(r, t, opts) {
   whiskers(r, r * 0.29, 1.18, 'rgba(255,255,255,0.95)');
 }
 
+// Flying pose for Baby and Cleo: body stretched out behind, front paws reaching forward like Superman,
+// tail streaming, speed streaks, head tilted toward where she's going. Mirrors when flying left.
+function drawFlyer(x, y, r, vel, type, alpha = 1) {
+  const t = CATS[type], flip = vel.x < 0, ang = Math.atan2(vel.y, Math.abs(vel.x));
+  const fur = type === 'cleo' ? t.patch : t.body;
+  ctx.save();
+  ctx.translate(x, y); if (flip) ctx.scale(-1, 1); ctx.rotate(ang);
+  if (alpha !== 1) ctx.globalAlpha *= alpha;
+  // speed streaks
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineCap = 'round';
+  for (const [dy, len, w] of [[-0.45, 1.3, 4], [0.05, 1.7, 5], [0.55, 1.2, 4]]) {
+    ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(-r * 2.3, r * dy); ctx.lineTo(-r * (2.3 + len), r * dy); ctx.stroke();
+  }
+  // tail streaming behind, with a little wave
+  const wave = Math.sin(frame * 0.45) * r * 0.18;
+  ctx.strokeStyle = fur; ctx.lineWidth = r * (type === 'cleo' ? 0.42 : 0.26);
+  ctx.beginPath(); ctx.moveTo(-r * 1.7, r * 0.05); ctx.quadraticCurveTo(-r * 2.25, -r * 0.3 + wave, -r * 2.75, -r * 0.05 - wave); ctx.stroke();
+  // body stretched out behind the head, back legs trailing
+  ctx.fillStyle = t.body;
+  ctx.beginPath(); ctx.ellipse(-r * 1.0, r * 0.18, r * 0.95, r * 0.55, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = t.belly;
+  ctx.beginPath(); ctx.ellipse(-r * 0.95, r * 0.45, r * 0.65, r * 0.25, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = t.body;
+  for (const k of [0, 1]) { ctx.beginPath(); ctx.ellipse(-r * (1.75 + k * 0.12), r * (0.42 + k * 0.16), r * 0.32, r * 0.14, 0.15, 0, 7); ctx.fill(); }
+  // front paws reaching forward
+  for (const [px, py] of [[1.12, 0.28], [1.0, 0.56]]) {
+    ctx.fillStyle = t.body; ctx.beginPath(); ctx.ellipse(r * px, r * py, r * 0.27, r * 0.17, -0.1, 0, 7); ctx.fill();
+    ctx.fillStyle = t.belly; ctx.beginPath(); ctx.ellipse(r * (px + 0.12), r * py, r * 0.12, r * 0.12, 0, 0, 7); ctx.fill();
+  }
+  ctx.lineCap = 'butt';
+  ctx.restore();
+  // the head on top, upright-ish and leaning into the flight
+  drawCat(x, y, r, (flip ? -1 : 1) * ang * 0.5, type, { alpha });
+}
+
 function drawCat(x, y, r, ang, type, opts = {}) {
   opts = { bright: true, ...opts };   // bright, wide-open eyes everywhere
   const t = CATS[type];
@@ -1599,8 +1635,9 @@ function drawWorld() {
     else if (g.kind === 'loot') drawLoot(b);
     else if (g.kind === 'coon') drawCoon(b.position.x, b.position.y, g.r, b.angle, g);
     else if (g.kind === 'cat') {
+      const posed = g.type !== 'cece' && Vector.magnitude(b.velocity) > 2.5;
       if (g.prancing || g.clone) {
-        g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, b.angle, g.type); });
+        g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, posed ? 0 : b.angle, g.type); });
         ctx.globalAlpha = 1;
       } else {
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
@@ -1614,8 +1651,10 @@ function drawWorld() {
         drawCat(b.position.x + 10 * amt, b.position.y, g.r, b.angle + w, g.type);
         ctx.globalAlpha = 1;
         drawCat(b.position.x + w * 16, b.position.y, g.r, b.angle + w, g.type);
+      } else if (posed) {
+        drawFlyer(b.position.x, b.position.y, g.r, b.velocity, g.type, g.clone ? 0.75 : 1);
       } else {
-        drawCat(b.position.x, b.position.y, g.r, b.angle, g.type, { alpha: g.clone ? 0.75 : 1 });
+        drawCat(b.position.x, b.position.y, g.r, g.type === 'cece' ? b.angle : 0, g.type, { alpha: g.clone ? 0.75 : 1 });
       }
     }
   }

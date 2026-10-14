@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 60;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 61;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -43,6 +43,7 @@ const MATS = {
   robovac: { density: 0.01, health: 220, fill: '#3b3f4a', edge: '#1d2027', points: 3000 },            // level 14: the hijacked robot vacuum
   basket:   { fill: '#c8925a', edge: '#7a5230', points: 0 },                                          // level 14: hanging basket (unbreakable)
   cucumber: { density: 0.0012, fill: '#5aa846', edge: '#2f6b28', points: 0 },                         // Easter egg: cats vs cucumbers (unbreakable)
+  toymouse: { density: 0.0008, fill: '#b9b2c8', edge: '#6e6682', points: 0 },                         // Easter egg: a toy mouse (unbreakable)
   lamp:     { fill: '#3b3a52', edge: '#1d1c2b', points: 0 },                                          // level 16: a lamp a cat can switch on (fixed)
 };
 
@@ -115,6 +116,8 @@ function mug(lv, x, base) { block(lv, 'mug', x, base - 15, 26, 30); }
 // later-level Easter eggs: a cucumber on the floor (a cat that touches it leaps in fright),
 // and a patch of sunshine where a cat that comes to rest curls up for a nap
 function cucumber(lv, x) { block(lv, 'cucumber', x, GROUND - 10, 70, 20); }
+// a toy mouse: a cat that bumps it squeaks and pounces (Easter egg)
+function toyMouse(lv, x, y = GROUND - 13) { block(lv, 'toymouse', x, y, 54, 26); }
 function sunbeam(lv, x, w) { lv.sunbeam = { x, w }; }
 // Moving targets (level 14). A robot vacuum the raccoons have hijacked: it drives back and forth between
 // x0 and x1 with a raccoon riding on top. Hit it hard and it stalls for a moment.
@@ -150,7 +153,7 @@ const LEVELS = [
     const t3 = hut(lv, 1300, GROUND, 170, 90, 'wood', 'glass'); coon(lv, 1300, GROUND);
     loot(lv, 1300, t3, 'yarn'); mug(lv, 1360, t3);
   } },
-  { name: 'The Garage', cats: ['cleo', 'cece', 'baby'], build(lv) {
+  { name: 'The Garage', bird: true, cats: ['cleo', 'cece', 'baby'], build(lv) {
     const s = hut(lv, 1150, GROUND, 300, 110, 'stone', 'stone'); coon(lv, 1150, GROUND);
     loot(lv, 1060, GROUND, 'fish');
     const a = hut(lv, 1087, s, 126, 100, 'wood', 'wood'); coon(lv, 1087, s);
@@ -181,6 +184,7 @@ const LEVELS = [
     hut(lv, 1280, t, 140, 100, 'wood', 'glass'); coon(lv, 1280, t);
     loot(lv, 1120, a, 'fish');
     hut(lv, 950, GROUND, 110, 80, 'glass', 'wood'); loot(lv, 950, GROUND, 'yarn');
+    toyMouse(lv, 700);                                                      // a toy mouse someone left out
   } },
   // Levels 7-10 borrow classic Angry Birds set pieces: chain-reaction dominoes, rolling boulders,
   // TNT, balloons (Danger Above) and the cardboard King Pig decoy (Mighty Hoax).
@@ -191,7 +195,7 @@ const LEVELS = [
     const s1 = shelf(lv, 1050, 610, 230); coon(lv, 1000, s1); coon(lv, 1100, s1); mug(lv, 1152, s1);
     const s2 = shelf(lv, 1360, 560, 170); coon(lv, 1335, s2); loot(lv, 1410, s2, 'yarn');
   } },
-  { name: 'Yarn Ball Avalanche', cats: ['baby', 'cece', 'cleo'], build(lv) {
+  { name: 'Yarn Ball Avalanche', bird: true, cats: ['baby', 'cece', 'cleo'], build(lv) {
     // a cardboard hill low enough for CeCe to bowl up: she shoves the yarn ball off the top
     ramp(lv, [[720, GROUND], [860, GROUND - 130], [920, GROUND - 130], [1140, GROUND]]);
     yarnBall(lv, 890, GROUND - 130, 44);                                    // nudge it down the slide
@@ -233,8 +237,9 @@ const LEVELS = [
   } },
   // Angry Birds Space's zero-gravity bubbles, the most-loved spin-off mechanic: the kids' science-fair
   // anti-gravity bubbles. Inside one nothing falls, so shots fly dead straight and raccoons drift.
-  { name: 'Zero-G Zoomies', cats: ['cleo', 'cece', 'baby'], build(lv) {
+  { name: 'Zero-G Zoomies', bird: true, cats: ['cleo', 'cece', 'baby'], build(lv) {
     bubble(lv, 1060, 560, 160);
+    toyMouse(lv, 1010, 660);                                                // a toy mouse, floating in the bubble
     coon(lv, 1060, 597);                                                    // floating in the middle
     block(lv, 'wood', 985, 520, 20, 100); block(lv, 'glass', 1135, 600, 20, 100); block(lv, 'wood', 1060, 478, 110, 18);
     catnip(lv, 1000, 660); loot(lv, 1120, 520, 'yarn');
@@ -618,6 +623,7 @@ const BOX = { x: 1000, w: 110, h: 64 };
 let boxCat = null;                  // which cat climbed into the box ("if I fits, I sits")
 let laser = null, laserWait = 0, laserCaught = false;
 let cucumberScare = false, sun = null, napCat = null;
+let eggFlags = {}, bird = null, moonCat = 0, petHold = null, hairball = null, hairCount = 0;   // the cat Easter eggs
 let eggBanner = null;               // the big 'you found an Easter egg' badge
 const EGG_LEN = 140;
 
@@ -744,6 +750,8 @@ function loadLevel(i) {
   settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
+  eggFlags = {}; hairCount = 0; hairball = null; petHold = null; moonCat = 0;
+  bird = LEVELS[i].bird ? { ox: 0, oy: 0, flee: 0, seed: Math.random() * 100 } : null;
   portals = lv.portals.map(q => ({ ...q, flap: 0 }));
   if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 590, text: LEVELS[i].intro, life: 200, tip: true });
   if (portals.length) popups.push({ x: fortCenter, y: LEVELS[i].intro ? 500 : 590, text: 'Magic cat flaps: in one, out the other!', life: 200, tip: true });
@@ -808,12 +816,16 @@ function onCollide(ev) {
     const a = p.bodyA, b = p.bodyB, ga = a.game, gb = b.game;
     if (ga && ga.prancing) ga.landed = true;
     if (settle === 0) for (const [c, o] of [[a, b], [b, a]]) if (c.game && c.game.kind === 'cat' && Vector.magnitude(Vector.sub(c.velocity, o.velocity)) > 6) c.game.bonked = true;
-    for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon') && !o.fixed && !o.poly) c.bump = true;   // shelves and slides don't soak it up
+    for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon') && !o.fixed && !o.poly && o.mat !== 'toymouse') c.bump = true;   // shelves and slides don't soak it up
     if (gb && gb.prancing) gb.landed = true;
     if (ga && gb) {
       if (ga.kind === 'cat' && gb.mat === 'lamp') switchLamp(b); else if (gb.kind === 'cat' && ga.mat === 'lamp') switchLamp(a);
       if (ga.kind === 'cat' && gb.kind === 'loot') { gb.collected = true; kill(b); }
       else if (gb.kind === 'cat' && ga.kind === 'loot') { ga.collected = true; kill(a); }
+      if (!eggFlags.mouse && settle === 0) {
+        if (ga.kind === 'cat' && gb.mat === 'toymouse') squeakMouse(b);
+        else if (gb.kind === 'cat' && ga.mat === 'toymouse') squeakMouse(a);
+      }
       if (!cucumberScare && settle === 0) {
         if (ga.kind === 'cat' && gb.mat === 'cucumber') scareCat(a, b);
         else if (gb.kind === 'cat' && ga.mat === 'cucumber') scareCat(b, a);
@@ -1090,6 +1102,61 @@ function catchLaser() {
   [current, ...queue].forEach((type, who) => chatter.push({ type, who, t: 1 + who * 6, life: CHATTER_LIFE, sym: '!' }));
   laser = null;
 }
+// ---- cat Easter eggs: a bird at the window, a hairball, a purr, a toy mouse, a cat in the moon
+const BIRD = { x: 520, y: 500 };   // perched on the first window's sill (that layer scrolls slower than the room)
+const birdPos = () => ({ x: cam.x * (1 - FAR_P) + BIRD.x + bird.ox, y: BIRD.y + bird.oy });
+const moonPos = () => ({ x: cam.x * (1 - FAR_P) + WINDOWS[0].wx + 300, y: WINDOWS[0].wy + 265 });
+function chatterAll(sym) { [current, ...queue].filter(Boolean).forEach((type, who) => chatter.push({ type, who, t: 1 + who * 6, life: CHATTER_LIFE, sym })); }
+function squeakMouse(m) {
+  eggFlags.mouse = true;
+  Sleeping.set(m, false); Body.setVelocity(m, { x: m.velocity.x, y: -7 }); Body.setAngularVelocity(m, 0.25);
+  [0, 1].forEach(k => sfx.tone('square', 1700 + k * 500, 2700, 0.07, 0.09, k * 0.09));
+  eggBonus('Toy mouse!', 500, m.position, 'Squeak!');
+}
+// taps on the window bird or the moon; true if it used the tap
+function eggTap(p) {
+  if (bird && !bird.flee) {
+    const b = birdPos();
+    if (Math.hypot(p.x - b.x, p.y - b.y) < 60) {
+      bird.flee = 1; chatterAll('?!');
+      [0, 1, 2, 3].forEach(k => sfx.tone('sine', 2400 + k * 160, 3300, 0.05, 0.08, k * 0.07));
+      eggBonus('Chattering at the birdie!', 750, b, 'ek ek ek ek');
+      return true;
+    }
+  }
+  if (isNight() && !moonCat) {
+    const m = moonPos();
+    if (Math.hypot(p.x - m.x, p.y - m.y) < 64) {
+      moonCat = 420; sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.1);
+      eggBonus('The moon is a cat?!', 1000, m, 'Mew.');
+      return true;
+    }
+  }
+  return false;
+}
+function updateEggs() {
+  if (bird && bird.flee) { bird.flee++; bird.ox += 4.5; bird.oy -= 3.2 + Math.sin(bird.flee * 0.35); if (bird.flee > 150) bird = null; }
+  if (moonCat > 0) moonCat--;
+  if (petHold) {
+    // hold a waiting cat: she purrs
+    const sp = queueSpots()[petHold.who];
+    if (!sp || phase === 'flying') petHold = null;
+    else {
+      petHold.t++;
+      if (petHold.t > 20 && petHold.t % 22 === 0) {
+        sfx.tone('triangle', 62, 54, 0.3, 0.05);
+        particles.push({ type: 'heart', x: sp.x + rand(-12, 12), y: sp.y - sp.r, vx: rand(-0.6, 0.6), vy: rand(-2, -1), s: rand(6, 9), life: 46, max: 46 });
+      }
+      if (petHold.t === 90 && !eggFlags['purr' + sp.type]) { eggFlags['purr' + sp.type] = true; eggBonus('Purrrrr...', 300, { x: sp.x, y: sp.y - sp.r }, 'Best human'); }
+    }
+  }
+}
+function hairballTime(spot) {
+  eggFlags.hair = true; hairball = { x: spot.x + spot.r + 34, y: GROUND - 16 };
+  for (let i = 0; i < 8; i++) particles.push({ type: 'puff', x: spot.x + spot.r * 0.7, y: spot.y, vx: rand(1, 4), vy: rand(-3, -0.5), s: rand(6, 11), life: 36, max: 36, color: i % 2 ? '#8a6a4a' : '#b08a62' });
+  sfx.tone('sawtooth', 120, 70, 0.4, 0.1); sfx.thud(0.5);
+  eggBonus('Hairball!', 300, { x: spot.x, y: spot.y - spot.r }, 'Ew, CeCe...');
+}
 // the cats waiting their turn, lined up behind the slingshot (spaced by size, so big CeCe doesn't overlap)
 function queueSpots() {
   const out = []; let qx = SLING.x - 45;
@@ -1098,6 +1165,12 @@ function queueSpots() {
 }
 // tap a waiting cat to pet her: a hop, a happy noise and some hearts
 function petCat(i, spot) {
+  if (spot.type === 'cece' && !eggFlags.hair) {
+    // pet CeCe too much and she coughs up a hairball
+    hairCount++;
+    if (hairCount === 4) popups.push({ x: spot.x, y: spot.y - spot.r - 40, text: 'Hurk... hurk...', life: 70 });
+    if (hairCount >= 6) { hairballTime(spot); return; }
+  }
   if (chatter.some(c => c.who === i + 1)) return;
   chatter.push({ type: spot.type, who: i + 1, t: 1, life: CHATTER_LIFE, sym: '♥' });
   for (let k = 0; k < 4; k++) particles.push({ type: 'heart', x: spot.x + rand(-15, 15), y: spot.y - spot.r, vx: rand(-1, 1), vy: rand(-2.5, -1.2), s: rand(7, 11), life: 50, max: 50 });
@@ -1160,6 +1233,7 @@ function step() {
   updateMachines();
   updatePortals();
   updateLamps();
+  updateEggs();
   updateLaser();
   if (frame % 6 === 0) for (const b of bodies()) {
     const g = b.game;
@@ -1359,9 +1433,10 @@ canvas.addEventListener('pointerdown', e => {
     return;
   }
   if (laser && Math.hypot(p.x - laser.x, p.y - laser.y) < 55) { catchLaser(); return; }
+  if (eggTap(p)) return;
   if (phase !== 'flying') {
     const spots = queueSpots(), i = spots.findIndex(q => Math.hypot(p.x - q.x, p.y - q.y) < q.r + 10);
-    if (i >= 0) { petCat(i, spots[i]); return; }
+    if (i >= 0) { petCat(i, spots[i]); petHold = { who: i, t: 0 }; return; }
   }
   if (phase === 'flying') { usePower(); return; }
   if (grabMug(e, p)) return;
@@ -1395,7 +1470,7 @@ canvas.addEventListener('pointermove', e => {
   else if (panning) { cam.x = clampCamX(panning.cx - (e.clientX - panning.sx) * dpr / worldScale); panIdle = 0; }
 });
 function release() {
-  mugGrab = null;
+  mugGrab = null; petHold = null;
   if (panning) { panning = null; return; }
   if (!dragging) return;
   dragging = false;
@@ -2104,6 +2179,15 @@ function drawBlock(b) {
     ctx.restore();
     return;
   }
+  if (g.mat === 'toymouse') {
+    ctx.strokeStyle = '#d98fa8'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-w * 0.4, 4); ctx.quadraticCurveTo(-w * 0.62, 6, -w * 0.58, -8); ctx.stroke();   // tail
+    ctx.fillStyle = m.fill; ctx.beginPath(); ctx.ellipse(0, 2, w * 0.42, h * 0.45, 0, 0, 7); ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = m.edge; ctx.stroke();
+    ctx.fillStyle = '#f2a7c0'; ctx.beginPath(); ctx.arc(w * 0.14, -h * 0.34, 7, 0, 7); ctx.fill(); ctx.stroke();                                                    // ear
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(w * 0.26, -1, 2.2, 0, 7); ctx.fill();                                                                          // eye
+    ctx.fillStyle = '#f08aa8'; ctx.beginPath(); ctx.arc(w * 0.42, 3, 3, 0, 7); ctx.fill();                                                                        // nose
+    ctx.restore();
+    return;
+  }
   if (g.mat === 'cucumber') {
     ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w, h, h / 2); ctx.fill();
     ctx.strokeStyle = m.edge; ctx.lineWidth = 2.5; ctx.stroke();
@@ -2336,6 +2420,7 @@ function nightWindows() {
       ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(mx, my, 120, 0, 7); ctx.fill();
       ctx.fillStyle = '#f4f1dc'; ctx.beginPath(); ctx.arc(mx, my, 42, 0, 7); ctx.fill();
       ctx.fillStyle = 'rgba(190,190,170,0.45)'; for (const [dx, dy, rr2] of [[-12, -8, 8], [10, 10, 6], [14, -14, 4]]) { ctx.beginPath(); ctx.arc(mx + dx, my + dy, rr2, 0, 7); ctx.fill(); }
+      if (moonCat > 0) drawMoonCat(mx, my);
     }
     ctx.fillStyle = '#101a33'; ctx.beginPath(); ctx.moveTo(x, y + w.wh);
     for (let k = 0; k <= w.ww; k += 20) ctx.lineTo(x + k, y + w.wh - 110 - Math.sin(k / 60 + w.wx) * 28);
@@ -2622,6 +2707,50 @@ function drawSunbeam() {
     ctx.globalAlpha = 1;
   }
 }
+function drawBird() {
+  if (!bird) return;
+  const b = birdPos(), t = frame + bird.seed, fl = bird.flee > 0;
+  ctx.save(); ctx.translate(b.x, b.y); if (fl) ctx.rotate(-0.3);
+  if (!fl) { ctx.strokeStyle = '#b57a3a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-4, 14); ctx.lineTo(-4, 24); ctx.moveTo(6, 14); ctx.lineTo(6, 24); ctx.stroke(); }
+  ctx.fillStyle = '#3f6fb5'; ctx.beginPath(); ctx.moveTo(-16, 2); ctx.lineTo(-42, 12); ctx.lineTo(-40, -4); ctx.closePath(); ctx.fill();   // tail
+  ctx.fillStyle = '#6fa8e8'; ctx.beginPath(); ctx.ellipse(0, 0, 23, 17, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#f4f7fb'; ctx.beginPath(); ctx.ellipse(5, 7, 14, 9, 0, 0, 7); ctx.fill();
+  const wf = fl ? Math.sin(t * 0.9) * 1 : 0;
+  ctx.save(); ctx.translate(-4, -3); ctx.rotate(-0.3 + wf); ctx.fillStyle = '#4a82cc'; ctx.beginPath(); ctx.ellipse(-7, 0, 17, 7, 0, 0, 7); ctx.fill(); ctx.restore();
+  const hy = -13 + (fl ? 0 : Math.sin(t * 0.045) * 2);
+  ctx.fillStyle = '#6fa8e8'; ctx.beginPath(); ctx.arc(17, hy, 12, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffb03a'; ctx.beginPath(); ctx.moveTo(27, hy - 3); ctx.lineTo(38, hy + 1); ctx.lineTo(27, hy + 4); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(21, hy - 3, 2.6, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(22, hy - 4, 0.9, 0, 7); ctx.fill();
+  ctx.restore();
+}
+function drawHairball() {
+  if (!hairball) return;
+  const { x, y } = hairball;
+  ctx.fillStyle = '#8a6a4a'; ctx.beginPath(); ctx.ellipse(x, y, 20, 14, 0, 0, 7); ctx.fill();
+  ctx.strokeStyle = '#b08a62'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+  for (const [dx, dy, ex, ey] of [[-14, -4, -22, -9], [-8, -10, -10, -17], [4, -12, 8, -19], [14, -6, 23, -10], [16, 4, 25, 7], [-16, 5, -24, 8]]) { ctx.beginPath(); ctx.moveTo(x + dx, y + dy); ctx.lineTo(x + ex, y + ey); ctx.stroke(); }
+  ctx.lineCap = 'butt';
+}
+// the moon grows cat ears, eyes and whiskers when you tap it (drawn inside the window)
+function drawMoonCat(mx, my) {
+  const c = '#f4f1dc';
+  for (const sg of [-1, 1]) {
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(mx + sg * 14, my - 38); ctx.lineTo(mx + sg * 36, my - 64); ctx.lineTo(mx + sg * 41, my - 22); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f2a7c0'; ctx.beginPath(); ctx.moveTo(mx + sg * 21, my - 38); ctx.lineTo(mx + sg * 34, my - 56); ctx.lineTo(mx + sg * 37, my - 30); ctx.closePath(); ctx.fill();
+  }
+  const blink = moonCat % 110 < 7;
+  for (const sg of [-1, 1]) {
+    const ex = mx + sg * 15, ey = my - 6;
+    if (blink) { ctx.strokeStyle = '#555'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(ex - 6, ey); ctx.lineTo(ex + 6, ey); ctx.stroke(); continue; }
+    ctx.fillStyle = '#9fd36a'; ctx.beginPath(); ctx.ellipse(ex, ey, 7, 9, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(ex, ey, 2.4, 8, 0, 0, 7); ctx.fill();
+  }
+  ctx.fillStyle = '#f08aa8'; ctx.beginPath(); ctx.moveTo(mx - 5, my + 6); ctx.lineTo(mx + 5, my + 6); ctx.lineTo(mx, my + 12); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(mx, my + 12); ctx.quadraticCurveTo(mx - 6, my + 20, mx - 12, my + 15); ctx.moveTo(mx, my + 12); ctx.quadraticCurveTo(mx + 6, my + 20, mx + 12, my + 15); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5;
+  for (const sg of [-1, 1]) for (const dy of [-2, 5]) { ctx.beginPath(); ctx.moveTo(mx + sg * 20, my + 10 + dy * 0.5); ctx.lineTo(mx + sg * 58, my + 6 + dy * 2.5); ctx.stroke(); }
+}
 function drawLaser() {
   if (!laser) return;
   ctx.globalAlpha = Math.min(1, laser.life / 20);
@@ -2641,6 +2770,7 @@ function drawBalloon(b) {
 }
 
 function drawWorld() {
+  drawBird();
   if (isNight()) { nightWindows(); drawKitchen(); drawNightLights(); drawFairyWire(fairyBulbs()); }
   // while it's about to snap, the whole slingshot shakes harder and harder
   const creak = snapStrain / SNAP_DELAY;
@@ -2657,6 +2787,7 @@ function drawWorld() {
     chatterBubble(i + 1, q.x + q.r * 0.3, GROUND - q.r * 2.3 + bob);
   });
   drawLaser();
+  drawHairball();
 
   const loaded = phase === 'aim' && current;
   const strain = loaded && current === 'cece' && !bandSnapped

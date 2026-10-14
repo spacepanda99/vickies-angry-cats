@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 44;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 45;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -522,6 +522,16 @@ function scheduleChatter(lineup, start) {
   chatter.push({ type: lineup[0], who: 0, t: start + lineup.length * 16 + 4, life: CHATTER_LIFE, sym: '!' });   // the leader has the last word
 }
 function chatterAt(who) { return chatter.find(c => c.who === who && c.t <= 0 && c.life > 0); }
+// the face that goes with each chatter bubble
+const CHATTER_MOOD = { '♥': { mood: 'happy' }, '♪': { mood: 'happy' }, '!': { mood: 'fierce', k: 0.6 }, '>:3': { mood: 'fierce', k: 0.9 }, '?!': { mood: 'scared' } };
+function chatterMood(who) { const c = chatterAt(who); return c ? CHATTER_MOOD[c.sym] || {} : {}; }
+// a cat in play: scared just after the cucumber, yowling while she flies, dizzy once a hard crash stops her
+function flightMood(b) {
+  const g = b.game;
+  if (g.scare > 0) return 'scared';
+  if (Vector.magnitude(b.velocity) > 2.5) return 'yowl';
+  return g.bonked ? 'dizzy' : null;
+}
 function chatterHop(who) { const c = chatterAt(who); return c ? Math.sin((1 - c.life / CHATTER_LIFE) * Math.PI) * 16 : 0; }
 function chatterBubble(who, x, y) {
   const c = chatterAt(who); if (!c) return;
@@ -695,6 +705,7 @@ function onCollide(ev) {
   for (const p of ev.pairs) {
     const a = p.bodyA, b = p.bodyB, ga = a.game, gb = b.game;
     if (ga && ga.prancing) ga.landed = true;
+    if (settle === 0) for (const [c, o] of [[a, b], [b, a]]) if (c.game && c.game.kind === 'cat' && Vector.magnitude(Vector.sub(c.velocity, o.velocity)) > 6) c.game.bonked = true;
     for (const [c, o] of [[ga, gb], [gb, ga]]) if (c && c.kind === 'cat' && CATS[c.type].bumpDamp && o && (o.kind === 'block' || o.kind === 'coon')) c.bump = true;
     if (gb && gb.prancing) gb.landed = true;
     if (ga && gb) {
@@ -940,7 +951,7 @@ function eggBonus(title, pts, pos, sub) {
 // a cat that touches the cucumber jumps sky high
 function scareCat(cat, cuc) {
   cucumberScare = true;
-  Body.setVelocity(cat, { x: -4, y: -17 }); cat.game.rest = 0;
+  Body.setVelocity(cat, { x: -4, y: -17 }); cat.game.rest = 0; cat.game.scare = 70;
   eggBonus('CUCUMBER!!', 2000, cuc.position, 'Who put that there?!');
   for (let i = 0; i < 18; i++) {
     const a = rand(0, Math.PI * 2), sp = rand(3, 8), t = CATS[cat.game.type];
@@ -1062,6 +1073,7 @@ function step() {
       const sp = Vector.magnitude(b.velocity);
       if (sp > MAX_SPEED) Body.setVelocity(b, Vector.mult(b.velocity, MAX_SPEED / sp));
       if (g.shake > 0) g.shake--;
+      if (g.scare > 0) g.scare--;
       if (g.prancing) {
         // stay upright and graceful; each landing springs her into the next prance
         Body.setAngularVelocity(b, 0);
@@ -1431,13 +1443,102 @@ function catEye(ex, ey, w, h, s, color, lid, tilt, lidColor) {
   ctx.strokeStyle = 'rgba(40,30,25,0.55)'; ctx.lineWidth = h * 0.12;
   ctx.beginPath(); ctx.ellipse(ex, ey, w, h, 0, 0, 7); ctx.stroke();
 }
-function catNoseMouth(R, ny, color) {
+function catNose(R, ny, color) {
   ctx.fillStyle = color;
   ctx.beginPath(); ctx.moveTo(-R * 0.08, ny); ctx.lineTo(R * 0.08, ny); ctx.lineTo(0, ny + R * 0.09); ctx.closePath(); ctx.fill();
+}
+function catNoseMouth(R, ny, color) {
+  catNose(R, ny, color);
   ctx.strokeStyle = '#5a4040'; ctx.lineWidth = R * 0.03; ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(0, ny + R * 0.09); ctx.lineTo(0, ny + R * 0.15);
   ctx.moveTo(0, ny + R * 0.15); ctx.quadraticCurveTo(-R * 0.08, ny + R * 0.23, -R * 0.16, ny + R * 0.17);
   ctx.moveTo(0, ny + R * 0.15); ctx.quadraticCurveTo(R * 0.08, ny + R * 0.23, R * 0.16, ny + R * 0.17); ctx.stroke();
+}
+// Facial expressions. Each cat passes where her eyes and nose sit (f, in units of her radius); opts.mood
+// picks the look and opts.k (0-1) how strong it is:
+//   fierce  aiming: narrowed eyes and angry brows, a fang showing (stronger the further she's pulled back)
+//   yowl    flying: angry brows and a wide-open battle cry
+//   scared  the slingshot creaking or snapping, the cucumber: huge eyes, tiny pupils, raised brows, sweat drop
+//   dizzy   after a hard crash: spiral eyes, wobbly mouth, stars going round
+//   happy   petted, winning, sitting in the box: ^ ^ eyes, blush, open smile
+//   sad     losing: droopy eyes, worried brows, frown, a tear
+// No mood keeps each cat's own resting face.
+function catFace(R, f, opts) {
+  const mood = sleepyEyes ? null : opts.mood, k = opts.k == null ? 1 : opts.k;
+  const ew = R * f.w * (opts.bright ? f.wb : 1), eh = R * f.h * (opts.bright ? f.hb : 1), ey = R * f.y, ny = R * f.ny;
+  const ex = s => s * R * f.x;
+  const ink = '#3a2a26', mouthDark = '#7a3040';
+  const brow = (s, x0, y0, x1, y1, w = 0.06) => { ctx.strokeStyle = 'rgba(50,35,30,0.85)'; ctx.lineWidth = R * w; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(ex(s) + s * R * x0, ey + y0); ctx.lineTo(ex(s) + s * R * x1, ey + y1); ctx.stroke(); };
+  if (!mood) { for (const s of [-1, 1]) catEye(ex(s), ey, ew, eh, s, f.eye, f.l0, f.t0, f.lid(s)); catNoseMouth(R, ny, f.nose); return; }
+  if (mood === 'happy') {
+    ctx.strokeStyle = ink; ctx.lineWidth = R * 0.055; ctx.lineCap = 'round';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(ex(s), ey + eh * 0.45, ew * 0.95, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke(); }
+    ctx.fillStyle = 'rgba(255,110,140,0.35)';
+    for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(ex(s) + s * R * 0.06, ey + R * 0.2, R * 0.11, R * 0.06, 0, 0, 7); ctx.fill(); }
+    catNose(R, ny, f.nose);
+    ctx.fillStyle = mouthDark; ctx.beginPath(); ctx.moveTo(-R * 0.18, ny + R * 0.12); ctx.quadraticCurveTo(0, ny + R * 0.46, R * 0.18, ny + R * 0.12); ctx.quadraticCurveTo(0, ny + R * 0.18, -R * 0.18, ny + R * 0.12); ctx.fill();
+    ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.ellipse(0, ny + R * 0.28, R * 0.08, R * 0.045, 0, 0, 7); ctx.fill();
+    return;
+  }
+  if (mood === 'fierce' || mood === 'yowl') {
+    for (const s of [-1, 1]) catEye(ex(s), ey, ew, eh, s, f.eye, 0.12 + 0.28 * k, 0.45 + 0.45 * k, f.lid(s));
+    for (const s of [-1, 1]) brow(s, 0.2, -eh * (1.45 + 0.1 * k), -0.12, -eh * (0.85 + 0.15 * k), 0.05 + 0.025 * k);
+    catNose(R, ny, f.nose);
+    if (mood === 'yowl') {
+      ctx.fillStyle = mouthDark; ctx.beginPath(); ctx.ellipse(0, ny + R * 0.28, R * 0.17, R * 0.18, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ff8fa3'; ctx.beginPath(); ctx.ellipse(0, ny + R * 0.38, R * 0.1, R * 0.06, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(sg * R * 0.1, ny + R * 0.14); ctx.lineTo(sg * R * 0.04, ny + R * 0.15); ctx.lineTo(sg * R * 0.07, ny + R * 0.23); ctx.closePath(); ctx.fill(); }
+    } else {
+      ctx.strokeStyle = '#5a4040'; ctx.lineWidth = R * 0.03; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(0, ny + R * 0.09); ctx.lineTo(0, ny + R * 0.15); ctx.moveTo(-R * 0.16, ny + R * 0.2); ctx.quadraticCurveTo(0, ny + R * 0.12, R * 0.16, ny + R * 0.2); ctx.stroke();
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(R * 0.05, ny + R * 0.16); ctx.lineTo(R * 0.11, ny + R * 0.17); ctx.lineTo(R * 0.08, ny + R * 0.25); ctx.closePath(); ctx.fill();
+    }
+    return;
+  }
+  if (mood === 'scared') {
+    for (const s of [-1, 1]) {
+      const x = ex(s), w = ew * 1.3, h = eh * 1.3;
+      ctx.fillStyle = f.eye; ctx.beginPath(); ctx.ellipse(x, ey, w, h, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,30,25,0.6)'; ctx.lineWidth = h * 0.12; ctx.stroke();
+      ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.arc(x + (Math.random() - 0.5) * w * 0.15, ey, w * 0.2, 0, 7); ctx.fill();   // tiny, trembling pupils
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x - w * 0.35, ey - h * 0.35, w * 0.18, 0, 7); ctx.fill();
+      brow(s, 0.18, -h * 1.5, -0.12, -h * 1.9);
+    }
+    catNose(R, ny, f.nose);
+    ctx.fillStyle = mouthDark; ctx.beginPath(); ctx.ellipse(0, ny + R * 0.22, R * 0.06, R * 0.085, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(150,210,255,0.9)';                                // sweat drop
+    ctx.beginPath(); ctx.moveTo(R * 0.62, -R * 0.62); ctx.quadraticCurveTo(R * 0.72, -R * 0.42, R * 0.62, -R * 0.38); ctx.quadraticCurveTo(R * 0.52, -R * 0.42, R * 0.62, -R * 0.62); ctx.fill();
+    return;
+  }
+  if (mood === 'dizzy') {
+    ctx.strokeStyle = ink; ctx.lineWidth = R * 0.035; ctx.lineCap = 'round';
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      for (let i = 0; i <= 28; i++) { const a = i * 0.45 + frame * 0.25 * s, rr2 = ew * 1.05 * i / 28; i ? ctx.lineTo(ex(s) + Math.cos(a) * rr2, ey + Math.sin(a) * rr2) : ctx.moveTo(ex(s), ey); }
+      ctx.stroke();
+    }
+    catNose(R, ny, f.nose);
+    ctx.strokeStyle = '#5a4040'; ctx.lineWidth = R * 0.035; ctx.beginPath();
+    for (let i = 0; i <= 8; i++) { const x = -R * 0.15 + i * R * 0.0375, y = ny + R * 0.2 + Math.sin(i * 1.6 + frame * 0.3) * R * 0.03; i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+    ctx.stroke();
+    for (let i = 0; i < 3; i++) {                                           // little stars circling her head
+      const a = frame * 0.08 + i * Math.PI * 2 / 3;
+      starShape(Math.cos(a) * R * 0.75, -R * 0.95 + Math.sin(a) * R * 0.18, R * 0.12, '#ffd84a', '#b8860b');
+    }
+    return;
+  }
+  if (mood === 'sad') {
+    for (const s of [-1, 1]) catEye(ex(s), ey, ew, eh, s, f.eye, 0.32, -0.5, f.lid(s));
+    for (const s of [-1, 1]) brow(s, 0.2, -eh * 1.2, -0.1, -eh * 1.75, 0.045);
+    catNose(R, ny, f.nose);
+    ctx.strokeStyle = '#5a4040'; ctx.lineWidth = R * 0.035; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(-R * 0.13, ny + R * 0.25); ctx.quadraticCurveTo(0, ny + R * 0.13, R * 0.13, ny + R * 0.25); ctx.stroke();
+    const tk = (frame % 90) / 90;                                           // a tear rolling down
+    ctx.globalAlpha *= 1 - tk * 0.7;
+    ctx.fillStyle = 'rgba(150,210,255,0.95)'; ctx.beginPath(); ctx.ellipse(ex(1) - R * 0.04, ey + eh + tk * R * 0.35, R * 0.04, R * 0.06, 0, 0, 7); ctx.fill();
+    return;
+  }
 }
 function whiskers(R, y, len, color) {
   ctx.strokeStyle = color; ctx.lineWidth = Math.max(1, R * 0.022); ctx.lineCap = 'round';
@@ -1526,8 +1627,8 @@ function drawCeCe(R, t, opts) {
   for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * R * 0.12, R * 0.24, R * 0.14, 0, 7); ctx.fill(); }
 
   // that look: half-closed green-gold eyes, lids slanted (crosser when not calm)
-  for (const s of [-1, 1]) catEye(s * R * 0.3, -R * 0.13, R * 0.15 * (opts.bright ? 1.22 : 1), R * 0.15 * (opts.bright ? 1.3 : 1), s, t.eye, opts.bright ? 0 : opts.calm ? 0.42 : 0.5, opts.calm ? 0.1 : 0.45, s < 0 ? '#c98a4a' : t.body);
-  catNoseMouth(R, R * 0.1, '#e7a3a6');
+  catFace(R, { x: 0.3, y: -0.13, w: 0.15, h: 0.15, wb: 1.22, hb: 1.3, eye: t.eye, lid: s => s < 0 ? '#c98a4a' : t.body,
+    l0: opts.bright ? 0 : opts.calm ? 0.42 : 0.5, t0: opts.calm ? 0.1 : 0.45, ny: 0.1, nose: '#e7a3a6' }, opts);
   whiskers(R, R * 0.22, 1.12, 'rgba(255,255,255,0.9)');
 }
 
@@ -1553,8 +1654,8 @@ function drawBaby(r, t, opts) {
   ctx.restore();
   ctx.strokeStyle = t.dark; ctx.lineWidth = r * 0.06; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
 
-  for (const s of [-1, 1]) catEye(s * r * 0.34, -r * 0.08, r * 0.19 * (opts.bright ? 1.15 : 1), r * 0.2 * (opts.bright ? 1.2 : 1), s, t.eye, opts.bright ? 0 : opts.calm ? 0.3 : 0.38, opts.calm ? 0.05 : 0.5, t.body);
-  catNoseMouth(r, r * 0.2, '#9d9aa1');
+  catFace(r, { x: 0.34, y: -0.08, w: 0.19, h: 0.2, wb: 1.15, hb: 1.2, eye: t.eye, lid: () => t.body,
+    l0: opts.bright ? 0 : opts.calm ? 0.3 : 0.38, t0: opts.calm ? 0.05 : 0.5, ny: 0.2, nose: '#9d9aa1' }, opts);
   whiskers(r, r * 0.33, 1.2, 'rgba(255,255,255,0.95)');
 }
 
@@ -1585,14 +1686,14 @@ function drawCleo(r, t, opts) {
   }
   ctx.closePath(); ctx.fill();
 
-  for (const s of [-1, 1]) catEye(s * r * 0.32, -r * 0.1, r * 0.17 * (opts.bright ? 1.15 : 1), r * 0.18 * (opts.bright ? 1.2 : 1), s, t.eye, opts.bright ? 0 : opts.calm ? 0.25 : 0.38, opts.calm ? -0.05 : 0.25, t.body);
-  catNoseMouth(r, r * 0.17, '#eba3a0');
+  catFace(r, { x: 0.32, y: -0.1, w: 0.17, h: 0.18, wb: 1.15, hb: 1.2, eye: t.eye, lid: () => t.body,
+    l0: opts.bright ? 0 : opts.calm ? 0.25 : 0.38, t0: opts.calm ? -0.05 : 0.25, ny: 0.17, nose: '#eba3a0' }, opts);
   whiskers(r, r * 0.29, 1.18, 'rgba(255,255,255,0.95)');
 }
 
 // Flying pose for Baby and Cleo: body stretched out behind, front paws reaching forward like Superman,
 // tail streaming, speed streaks, head tilted toward where she's going. Mirrors when flying left.
-function drawFlyer(x, y, r, vel, type, alpha = 1) {
+function drawFlyer(x, y, r, vel, type, alpha = 1, mood = 'yowl') {
   const t = CATS[type], flip = vel.x < 0, ang = Math.atan2(vel.y, Math.abs(vel.x));
   const fur = type === 'cleo' ? t.patch : t.body;
   ctx.save();
@@ -1622,7 +1723,7 @@ function drawFlyer(x, y, r, vel, type, alpha = 1) {
   ctx.lineCap = 'butt';
   ctx.restore();
   // the head on top, upright-ish and leaning into the flight
-  drawCat(x, y, r, (flip ? -1 : 1) * ang * 0.5, type, { alpha });
+  drawCat(x, y, r, (flip ? -1 : 1) * ang * 0.5, type, { alpha, mood });
 }
 
 function drawCat(x, y, r, ang, type, opts = {}) {
@@ -2021,7 +2122,7 @@ function drawBox() {
   const x = BOX.x, w = BOX.w, top = GROUND - BOX.h;
   ctx.fillStyle = '#b98a55';                                              // back flap
   ctx.beginPath(); ctx.moveTo(x - w / 2 + 6, top); ctx.lineTo(x - w / 2 + 16, top - 24); ctx.lineTo(x + w / 2 - 16, top - 24); ctx.lineTo(x + w / 2 - 6, top); ctx.closePath(); ctx.fill();
-  if (boxCat) drawCat(x, top - 8 - Math.abs(Math.sin(frame * 0.03)) * 3, 30, 0, boxCat, { calm: true });
+  if (boxCat) drawCat(x, top - 8 - Math.abs(Math.sin(frame * 0.03)) * 3, 30, 0, boxCat, { mood: 'happy' });
   ctx.fillStyle = '#d9a86c'; ctx.fillRect(x - w / 2, top, w, BOX.h);
   ctx.strokeStyle = '#8a6136'; ctx.lineWidth = 3; ctx.strokeRect(x - w / 2, top, w, BOX.h);
   ctx.fillStyle = '#c9965b';                                              // side flaps flopped open
@@ -2104,7 +2205,7 @@ function drawWorld() {
   // waiting cats sit in line behind the slingshot
   queueSpots().forEach((q, i) => {
     const bob = Math.sin(frame * 0.05 + i) * 2 - chatterHop(i + 1);
-    drawCat(q.x, q.y + bob, q.r, 0, q.type, { calm: !chatterAt(i + 1) });
+    drawCat(q.x, q.y + bob, q.r, 0, q.type, { calm: !chatterAt(i + 1), ...(winTimer > 0 ? { mood: 'happy' } : chatterMood(i + 1)) });
     chatterBubble(i + 1, q.x + q.r * 0.3, GROUND - q.r * 2.3 + bob);
   });
   drawLaser();
@@ -2146,7 +2247,7 @@ function drawWorld() {
     else if (g.kind === 'cat') {
       const posed = g.type !== 'cece' && Vector.magnitude(b.velocity) > 2.5;
       if (g.prancing || g.clone) {
-        g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, posed ? 0 : b.angle, g.type); });
+        g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, posed ? 0 : b.angle, g.type, { mood: 'yowl' }); });
         ctx.globalAlpha = 1;
       } else {
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
@@ -2156,14 +2257,14 @@ function drawWorld() {
         // the head shake: fast side-to-side wobble with blurry ghost copies
         const amt = g.shake / 42, w = Math.sin(g.shake * 1.6) * 0.5 * amt;
         ctx.globalAlpha = 0.3;
-        drawCat(b.position.x - 10 * amt, b.position.y, g.r, b.angle - w, g.type);
-        drawCat(b.position.x + 10 * amt, b.position.y, g.r, b.angle + w, g.type);
+        drawCat(b.position.x - 10 * amt, b.position.y, g.r, b.angle - w, g.type, { mood: 'yowl' });
+        drawCat(b.position.x + 10 * amt, b.position.y, g.r, b.angle + w, g.type, { mood: 'yowl' });
         ctx.globalAlpha = 1;
-        drawCat(b.position.x + w * 16, b.position.y, g.r, b.angle + w, g.type);
+        drawCat(b.position.x + w * 16, b.position.y, g.r, b.angle + w, g.type, { mood: 'yowl' });
       } else if (posed) {
-        drawFlyer(b.position.x, b.position.y, g.r, b.velocity, g.type, g.clone ? 0.75 : 1);
+        drawFlyer(b.position.x, b.position.y, g.r, b.velocity, g.type, g.clone ? 0.75 : 1, g.scare > 0 ? 'scared' : 'yowl');
       } else {
-        drawCat(b.position.x, b.position.y, g.r, g.type === 'cece' ? b.angle : 0, g.type, { alpha: g.clone ? 0.75 : 1 });
+        drawCat(b.position.x, b.position.y, g.r, g.type === 'cece' ? b.angle : 0, g.type, { alpha: g.clone ? 0.75 : 1, mood: flightMood(b) });
       }
     }
   }
@@ -2171,7 +2272,10 @@ function drawWorld() {
   if (loaded) {
     if (dragging && !bandSnapped) drawTrajectory();
     const hop = dragging ? 0 : chatterHop(0);
-    drawCat(tip.x, tip.y - hop, CATS[current].r, 0, current);
+    // her face: scared when the band creaks or snaps, fiercer the further she's pulled, else her chatter face
+    const face = bandSnapped || snapStrain > 0 || strain > 0.5 ? { mood: 'scared' }
+      : dragging ? { mood: 'fierce', k: Math.min(1, Math.hypot(pull.x, pull.y) / MAX_PULL) } : chatterMood(0);
+    drawCat(tip.x, tip.y - hop, CATS[current].r, 0, current, face);
     chatterBubble(0, tip.x + CATS[current].r * 0.4, tip.y - hop - CATS[current].r * 1.75);
     if (!bandSnapped) band(SLING.x - 24 + sj.x, 646 + sj.y, tip.x - 6, tip.y, strain);
   }
@@ -2194,7 +2298,7 @@ function drawWorld() {
       ctx.bezierCurveTo(p.x - p.s * 1.2, p.y - p.s * 0.3, p.x - p.s * 0.4, p.y - p.s * 1.1, p.x, p.y - p.s * 0.35);
       ctx.bezierCurveTo(p.x + p.s * 0.4, p.y - p.s * 1.1, p.x + p.s * 1.2, p.y - p.s * 0.3, p.x, p.y + p.s * 0.6); ctx.fill();
     }
-    else if (p.type === 'kitten') { ctx.globalAlpha = 1; drawCat(p.x, p.y - Math.abs(Math.sin(p.life * 0.4)) * 14, p.s, Math.sin(p.life * 0.4) * 0.15, 'baby'); }
+    else if (p.type === 'kitten') { ctx.globalAlpha = 1; drawCat(p.x, p.y - Math.abs(Math.sin(p.life * 0.4)) * 14, p.s, Math.sin(p.life * 0.4) * 0.15, 'baby', { mood: 'happy' }); }
     else { ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); starShape(0, 0, p.s, p.color); ctx.restore(); }
   }
   ctx.globalAlpha = 1;
@@ -2296,7 +2400,7 @@ function drawUpBanner() {
     ctx.lineCap = 'butt';
   }
   const r = type === 'cece' ? 92 : type === 'cleo' ? 74 : 68;
-  drawCat(UW / 2 - 210, 462 + Math.sin(t * 0.3) * 3, r, Math.sin(t * 0.25) * 0.08, type);
+  drawCat(UW / 2 - 210, 462 + Math.sin(t * 0.3) * 3, r, Math.sin(t * 0.25) * 0.08, type, { mood: 'fierce', k: 0.7 });
   const x0 = UW / 2 - 85, st = NAME_STYLE[type];
   nameText(type, x0, 450, 118, 'left');
   ctx.font = `${st.weight} 118px ${st.font}`;
@@ -2321,8 +2425,17 @@ function centred(fn) {
   uiShift = 0;
 }
 
+// the three cats flanking the result panel: bouncing and beaming on a win, slumped and teary on a loss
+function resultCats(mood) {
+  const happy = mood === 'happy';
+  for (const [type, x, y, r, ph] of [['cleo', W / 2 - 450, 470, 72, 0], ['baby', W / 2 - 430, 660, 60, 1.7], ['cece', W / 2 + 470, 570, 100, 0.8]]) {
+    const hop = happy ? Math.abs(Math.sin(frame * 0.09 + ph)) * 26 : 0;
+    drawCat(x, y - hop + (happy ? 0 : 10), r, happy ? Math.sin(frame * 0.09 + ph) * 0.1 : (x < W / 2 ? 0.12 : -0.12), type, { mood });
+  }
+}
 function drawWon() {
   panel(W / 2, H / 2, 680, 470);
+  resultCats('happy');
   text(LEVELS[levelIdx].name, W / 2, 255, 28, '#8a6a9a', { weight: 500 });
   text('Raccoons busted!', W / 2, 305, 56, '#e8578f', { stroke: '#fff', strokeW: 6 });
   for (let i = 0; i < 3; i++) {
@@ -2339,6 +2452,7 @@ function drawWon() {
 
 function drawLost() {
   panel(W / 2, H / 2, 640, 400);
+  resultCats('sad');
   text('They got away!', W / 2, 320, 56, '#7a5a9a', { stroke: '#fff', strokeW: 6 });
   drawCoon(W / 2, 420, 46, Math.sin(frame * 0.08) * 0.15, { hp: 30, maxHp: 30, blink: 0, act: 'fish' });
   text('The raccoons are laughing. Try again!', W / 2, 500, 24, '#9a8a7a', { weight: 500 });
@@ -2490,9 +2604,10 @@ function drawMenu() {
   for (const [type, x, y, r] of [['cece', 800, 612, 132], ['baby', 548, 650, 84], ['cleo', 1052, 646, 92]]) {
     uiButtons.push({ x: x + uiShift, y: y + 36, w: r * 2, h: r * 2.2, action: tapCat(type) });
   }
-  drawCat(800, 648 + bob(1) - hopOf('cece'), 132, 0, 'cece', { bright: true });
-  drawCat(548, 686 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', { bright: true });
-  drawCat(1052, 682 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', { bright: true });
+  const menuFace = type => hopOf(type) > 0 ? { mood: 'happy' } : {};
+  drawCat(800, 648 + bob(1) - hopOf('cece'), 132, 0, 'cece', menuFace('cece'));
+  drawCat(548, 686 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', menuFace('baby'));
+  drawCat(1052, 682 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', menuFace('cleo'));
   nameText('baby', 548, 808, 62);
   nameText('cece', 800, 836, 70);
   nameText('cleo', 1052, 808, 72);

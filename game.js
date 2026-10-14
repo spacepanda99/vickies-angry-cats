@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 53;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 54;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -2964,7 +2964,7 @@ function drawMenu() {
   nameText('cece', 800, 836, 70);
   nameText('cleo', 1052, 808, 72);
   button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => { state = 'levels'; });
-  text('v' + GAME_VERSION, -uiShift + 30, 875, 18, 'rgba(255,255,255,0.8)', { align: 'left', stroke: 'rgba(0,0,0,0.3)', strokeW: 4, weight: 500 });
+  text('v' + GAME_VERSION, -uiShift + 30, 875, 26, 'rgba(255,255,255,0.8)', { align: 'left', stroke: 'rgba(0,0,0,0.3)', strokeW: 4, weight: 500 });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
 }

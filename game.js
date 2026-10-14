@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 38;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 39;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -40,6 +40,8 @@ const MATS = {
   ramp:   { fill: '#e2c69c', edge: '#a8875a', points: 0 },                                           // fixed cardboard slide
   cage:   { density: 0.0015, health: 30, fill: 'rgba(225,235,250,0.3)', edge: '#7d8594', points: 0 },    // a kitten is locked inside
   mug:    { density: 0.0012, health: 14, fill: '#f7f3ea', edge: '#8f8676', points: 250 },              // Easter egg: swipe it off yourself
+  robovac: { density: 0.01, health: 220, fill: '#3b3f4a', edge: '#1d2027', points: 3000 },            // level 14: the hijacked robot vacuum
+  basket:   { fill: '#c8925a', edge: '#7a5230', points: 0 },                                          // level 14: hanging basket (unbreakable)
   cucumber: { density: 0.0012, fill: '#5aa846', edge: '#2f6b28', points: 0 },                         // Easter egg: cats vs cucumbers (unbreakable)
 };
 
@@ -113,6 +115,12 @@ function mug(lv, x, base) { block(lv, 'mug', x, base - 15, 26, 30); }
 // and a patch of sunshine where a cat that comes to rest curls up for a nap
 function cucumber(lv, x) { block(lv, 'cucumber', x, GROUND - 10, 70, 20); }
 function sunbeam(lv, x, w) { lv.sunbeam = { x, w }; }
+// Moving targets (level 14). A robot vacuum the raccoons have hijacked: it drives back and forth between
+// x0 and x1 with a raccoon riding on top. Hit it hard and it stalls for a moment.
+function robovac(lv, x0, x1) { lv.vacs.push({ x0, x1 }); }
+// a raccoon in a basket swinging from a hook in the ceiling. A cat that flies through the rope claws it
+// in two and the basket drops.
+function swingBasket(lv, ax, ay, len) { lv.swings.push({ x: ax, y: ay, len }); }
 // a pair of magic cat flaps (Angry Birds Seasons' portals): whatever goes in one comes out the other,
 // same speed, same heading
 const PORTAL_R = 52;
@@ -232,6 +240,15 @@ const LEVELS = [
     const t = hut(lv, 1340, GROUND, 150, 120, 'glass', 'wood'); coon(lv, 1340, GROUND, false, true); coon(lv, 1340, t);
     loot(lv, 1440, GROUND, 'fish');
     const g = shelf(lv, 1440, 430, 70); loot(lv, 1440, g, 'goldfish');     // the secret: come out of the orange flap climbing steeply
+  } },
+  // Moving targets, the next step up: the raccoons have hijacked the robot vacuum (cats' sworn enemy) and
+  // ride it back and forth, and one swings overhead in a laundry basket. Time your shots, or claw the rope.
+  { name: 'Robo-Vac Rodeo', cats: ['cece', 'baby', 'cleo'], intro: 'Claw through the rope to drop the basket!', build(lv) {
+    robovac(lv, 960, 1290);
+    swingBasket(lv, 1170, 300, 240);
+    const t = hut(lv, 1440, GROUND, 130, 160, 'wood', 'wood'); coon(lv, 1440, GROUND, false, true);
+    coon(lv, 1410, t); catnip(lv, 1472, t);
+    const g = shelf(lv, 1530, 430, 60); loot(lv, 1530, g, 'goldfish');     // the secret, high on the wall past the dresser
   } },
 ];
 
@@ -518,6 +535,8 @@ function chatterBubble(who, x, y) {
 let menuHop = {};                   // home screen: when each cat was last tapped
 let bubbles = [];                   // zero-gravity zones in this level
 let portals = [];                   // magic cat flaps in this level
+let vacs = [], swings = [];         // level 14's moving machines
+const VAC_SPEED = 2.2;
 // Easter eggs on every level: a cardboard box to sit in, and a red laser dot that shows up while you aim
 const BOX = { x: 1000, w: 110, h: 64 };
 let boxCat = null;                  // which cat climbed into the box ("if I fits, I sits")
@@ -574,6 +593,29 @@ function makeFloat(f) {
   group.weight = (plank.mass + c.mass + group.balloons.reduce((s, b) => s + b.mass, 0)) * 0.001;
   return group;
 }
+function makeVac(v) {
+  // it runs on rails: it skips the floor (no floor friction fighting its motor) and its height is held fixed
+  const body = Bodies.rectangle(v.x0, GROUND - 16, 120, 30, { chamfer: { radius: 13 }, density: MATS.robovac.density, friction: 1, frictionStatic: 2, label: 'block',
+    collisionFilter: { category: 0x0001, mask: 0xFFFF & ~0x0004 } });
+  Body.setInertia(body, Infinity);                                          // it never tips over
+  body.game = { kind: 'block', mat: 'robovac', w: 120, h: 30, hp: MATS.robovac.health, maxHp: MATS.robovac.health, seed: Math.random() * 1000 };
+  const rider = makeCoon({ x: v.x0, y: GROUND - 30 - 37, r: 36, helmet: true });
+  Body.setInertia(rider, Infinity);                                         // slides with it instead of rolling off
+  Composite.add(engine.world, [body, rider]);
+  return { body, rider, x0: v.x0, x1: v.x1, dir: 1, stun: 0, cmd: null, vx: 0 };
+}
+function makeSwing(w) {
+  const by = w.y + w.len, opts = { density: 0.002, friction: 0.8 };
+  const basket = Body.create({ parts: [Bodies.rectangle(w.x, by, 100, 12, opts), Bodies.rectangle(w.x - 44, by - 26, 12, 52, opts), Bodies.rectangle(w.x + 44, by - 26, 12, 52, opts)],
+    frictionAir: 0.002, label: 'block' });
+  const handle = { x: w.x, y: by - 90 };                                    // where the rope ties on, above the rim
+  basket.game = { kind: 'block', mat: 'basket', handle: Vector.sub(handle, basket.position), seed: Math.random() * 1000 };
+  const rope = Constraint.create({ pointA: { x: w.x, y: w.y }, bodyB: basket, pointB: basket.game.handle, length: handle.y - w.y, stiffness: 0.9, damping: 0.02 });
+  const rider = makeCoon({ x: w.x, y: by - 6 - 31, r: 30 });
+  Composite.add(engine.world, [basket, rope, rider]);
+  Body.setVelocity(basket, { x: 4.5, y: 0 }); Body.setVelocity(rider, { x: 4.5, y: 0 });
+  return { basket, rope, ax: w.x, ay: w.y, cut: false };
+}
 function makeCoon(c) {
   const body = Bodies.circle(c.x, c.y, c.r, { density: 0.0025, friction: 0.7, restitution: 0.15, label: 'coon' });
   const hp = c.boss ? 320 : c.helmet ? 75 : 30;   // a colander helmet makes them much tougher
@@ -602,16 +644,18 @@ function makeCat(type, x, y, r) {
 function loadLevel(i) {
   levelIdx = i;
   newEngine();
-  const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [], portals: [] };
+  const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [], portals: [], vacs: [], swings: [] };
   LEVELS[i].build(lv);
-  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats, lv.bubbles, lv.portals]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
-  Composite.add(engine.world, Bodies.rectangle(WORLD_W / 2, GROUND + 60, WORLD_W * 3, 120, { isStatic: true, friction: 0.9, label: 'ground' }));
+  for (const v of lv.vacs) { v.x0 += FORT_X; v.x1 += FORT_X; }
+  for (const list of [lv.blocks, lv.raccoons, lv.loot, lv.floats, lv.bubbles, lv.portals, lv.swings]) for (const o of list) { o.x += FORT_X; if (o.pts) o.pts = o.pts.map(([x, y]) => [x + FORT_X, y]); }
+  Composite.add(engine.world, Bodies.rectangle(WORLD_W / 2, GROUND + 60, WORLD_W * 3, 120, { isStatic: true, friction: 0.9, label: 'ground', collisionFilter: { category: 0x0004 } }));
   for (const b of lv.blocks) Composite.add(engine.world, makeBlock(b));
   for (const c of lv.raccoons) Composite.add(engine.world, makeCoon(c));
   for (const l of lv.loot) Composite.add(engine.world, makeLoot(l));
   floats = lv.floats.map(makeFloat);
+  vacs = lv.vacs.map(makeVac); swings = lv.swings.map(makeSwing);
   for (const f of floats) Composite.add(engine.world, [f.plank, f.coon, ...f.balloons, ...f.balloons.map(b => b.game.rope)]);
-  const xs = [...lv.raccoons, ...lv.floats].map(c => c.x);
+  const xs = [...lv.raccoons, ...lv.floats, ...lv.swings, ...lv.vacs.map(v => ({ x: (v.x0 + v.x1) / 2 }))].map(c => c.x);
   fortCenter = xs.reduce((s, x) => s + x, 0) / xs.length;
   queue = LEVELS[i].cats.slice();
   current = queue.shift();
@@ -621,6 +665,7 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
   portals = lv.portals.map(q => ({ ...q, flap: 0 }));
+  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 330, text: LEVELS[i].intro, life: 170, big: true });
   if (portals.length) popups.push({ x: fortCenter, y: 330, text: 'Magic cat flaps: in one, out the other!', life: 160, big: true });
   bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
   if (bubbles.length) popups.push({ x: fortCenter, y: 330, text: 'Zero gravity inside the bubbles!', life: 150, big: true });
@@ -818,6 +863,45 @@ function sitInBox(b) {
   eggBonus(g.type === 'cece' ? 'If I fits... I sits!' : 'If I fits, I sits!', 2500, { x: BOX.x, y: GROUND - BOX.h - 20 }, g.type === 'cece' ? '(barely)' : null);
   sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6, 0.1);
 }
+// The robot vacuum drives itself (easing into each turn so its rider stays on); a hard hit stalls it.
+// The basket gets a tiny push each time it passes the bottom so it keeps swinging, and a flying cat
+// that crosses the rope claws it in two.
+function updateMachines() {
+  for (const v of vacs) {
+    const b = v.body;
+    b.game.stunned = v.stun > 0;
+    if (b.game.dead) continue;
+    Sleeping.set(b, false); if (!v.rider.game.dead) Sleeping.set(v.rider, false);
+    Body.setPosition(b, { x: b.position.x, y: GROUND - 16 });
+    if (v.stun > 0) { v.stun--; v.cmd = null; v.vx = b.velocity.x * 0.95; Body.setVelocity(b, { x: v.vx, y: 0 }); continue; }
+    if (b.position.x > v.x1) v.dir = -1; else if (b.position.x < v.x0) v.dir = 1;
+    v.vx += (v.dir * VAC_SPEED - v.vx) * 0.05;
+    Body.setVelocity(b, { x: v.vx, y: 0 }); v.cmd = v.vx;
+    // the rider holds on while it's sitting up top; knock it off and it's on its own
+    const r = v.rider, dx = b.position.x - r.position.x, dy = b.position.y - r.position.y;
+    if (!r.game.dead && Math.abs(dx) < 60 && dy > 35 && dy < 75) Body.setVelocity(r, { x: v.vx + dx * 0.08, y: r.velocity.y });
+  }
+  for (const w of swings) {
+    if (w.cut) continue;
+    const b = w.basket, hp = Vector.add(b.position, Vector.rotate(b.game.handle, b.angle));
+    Sleeping.set(b, false);
+    if (Math.abs(b.position.x - w.ax) < 12 && Math.abs(b.velocity.x) < 4.5 && Math.abs(b.velocity.x) > 0.2) Body.setVelocity(b, { x: Math.sign(b.velocity.x) * 4.5, y: b.velocity.y });
+    for (const c of flying) {
+      if (c.game.done) continue;
+      if (distToSegment(c.position, { x: w.ax, y: w.ay }, hp) < c.game.r * 0.7) {
+        w.cut = true; Composite.remove(engine.world, w.rope);
+        addScore(500, c.position, 'Snip!'); sparkle(c.position, 8);
+        sfx.tone('square', 1400, 300, 0.12, 0.08); sfx.snap();
+        break;
+      }
+    }
+  }
+}
+function distToSegment(p, a, b) {
+  const ab = Vector.sub(b, a), t = Math.max(0, Math.min(1, Vector.dot(Vector.sub(p, a), ab) / (Vector.dot(ab, ab) || 1)));
+  return Vector.magnitude(Vector.sub(p, Vector.add(a, Vector.mult(ab, t))));
+}
+
 // Magic cat flaps: anything that moves into one pops out of its partner at the same speed and heading.
 // It can't go back in the flap it came out of until it has left it, so nothing ping-pongs.
 function updatePortals() {
@@ -953,6 +1037,7 @@ function step() {
     Body.setVelocity(b, Vector.mult(b.velocity, b.game && b.game.kind === 'cat' ? 0.996 : 0.99));
     Body.setAngularVelocity(b, b.angularVelocity * 0.98);
   }
+  updateMachines();
   updatePortals();
   updateLaser();
   if (frame % 6 === 0) for (const b of bodies()) {
@@ -961,6 +1046,7 @@ function step() {
       particles.push({ type: 'chip', x: b.position.x + rand(-6, 6), y: b.position.y + g.r * 0.5, vx: rand(-1, 1), vy: rand(-1, 0.5), s: rand(3, 5), rot: rand(0, 6), vr: rand(-0.3, 0.3), color: g.act === 'fish' ? '#ffb46b' : '#b5773a', life: 22, max: 22 });
   }
   Engine.update(engine, STEP);
+  for (const v of vacs) if (!v.stun && v.cmd !== null && !v.body.game.dead && Math.abs(v.body.velocity.x - v.cmd) > 3) { v.stun = 90; sparkle(v.body.position, 6); }
   if (settle > 0) settle--;
   if (snapTimer > 0) snapTimer--;
   knocksThisFrame = 0;
@@ -1684,6 +1770,17 @@ function drawCoon(x, y, r, ang, g) {
 
 function drawBlock(b) {
   const g = b.game, m = MATS[g.mat], w = g.w, h = g.h;
+  if (g.mat === 'basket') {
+    // woven laundry basket: its three parts, a weave, and a handle up to where the rope ties on
+    for (const part of b.parts.slice(1)) {
+      ctx.beginPath(); part.vertices.forEach((v, i) => i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y)); ctx.closePath();
+      ctx.fillStyle = m.fill; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = m.edge; ctx.stroke();
+    }
+    const L = b.parts[2].position, R = b.parts[3].position, H = Vector.add(b.position, Vector.rotate(g.handle, b.angle));
+    ctx.strokeStyle = m.edge; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(L.x, L.y - 22); ctx.quadraticCurveTo(H.x, H.y - 30, R.x, R.y - 22); ctx.stroke();
+    return;
+  }
   if (g.poly) {
     // cardboard slide
     ctx.beginPath(); b.vertices.forEach((v, i) => i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y)); ctx.closePath();
@@ -1705,6 +1802,23 @@ function drawBlock(b) {
     ctx.restore();
     ctx.lineWidth = 3; ctx.strokeStyle = m.edge; ctx.beginPath(); ctx.arc(0, 0, r, 0, 7); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(r * 0.7, r * 0.7); ctx.quadraticCurveTo(r * 1.3, r * 0.8, r * 1.1, r * 1.3); ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  if (g.mat === 'robovac') {
+    ctx.fillStyle = m.fill; rr(-w / 2, -h / 2, w, h, h / 2); ctx.fill();
+    ctx.strokeStyle = m.edge; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#5b6170'; rr(-w / 2 + 12, -h / 2 + 3, w - 24, 8, 4); ctx.fill();
+    ctx.fillStyle = g.stunned ? (frame % 10 < 5 ? '#ff4a4a' : '#7a1a1a') : (frame % 40 < 20 ? '#5cff7a' : '#1f7a33');
+    ctx.beginPath(); ctx.arc(w * 0.28, -h / 2 + 7, 4, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#c9cdd6'; ctx.lineWidth = 2;                         // spinning side brushes
+    for (const sg of [-1, 1]) {
+      ctx.save(); ctx.translate(sg * (w / 2 - 10), h / 2 - 3); ctx.rotate(g.stunned ? 0 : frame * 0.5 * sg);
+      for (let k = 0; k < 3; k++) { ctx.rotate(Math.PI * 2 / 3); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(11, 0); ctx.stroke(); }
+      ctx.restore();
+    }
+    const dmg = 1 - g.hp / g.maxHp;
+    if (dmg > 0.4) { ctx.fillStyle = 'rgba(255,200,80,' + (0.5 + 0.5 * Math.sin(frame * 0.7)) + ')'; ctx.beginPath(); ctx.arc(-w * 0.2, -h / 2, 3, 0, 7); ctx.fill(); }   // sparking
     ctx.restore();
     return;
   }
@@ -2007,6 +2121,14 @@ function drawWorld() {
   const order = { block: 0, loot: 1, balloon: 2, coon: 3, cat: 4 };
   drawBubbles();
   drawPortals();
+  // basket ropes, from the ceiling hook down to the handle
+  for (const w of swings) {
+    ctx.fillStyle = '#8a8f99'; ctx.beginPath(); ctx.arc(w.ax, w.ay, 7, 0, 7); ctx.fill();
+    ctx.fillRect(w.ax - 14, w.ay - 12, 28, 6);
+    if (w.cut) continue;
+    const hp = Vector.add(w.basket.position, Vector.rotate(w.basket.game.handle, w.basket.angle));
+    ctx.strokeStyle = '#9a7b52'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(w.ax, w.ay); ctx.lineTo(hp.x, hp.y); ctx.stroke();
+  }
   // balloon strings, drawn behind everything on the platform
   ctx.strokeStyle = 'rgba(80,80,90,0.7)'; ctx.lineWidth = 2;
   for (const f of floats) for (const bl of f.balloons) {

@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 46;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 47;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1243,6 +1243,7 @@ canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   sfx.init();
   const u = toUI(e);
+  if (state === 'menu') menuPointer = { ...u, f: frame };
   for (let i = uiButtons.length - 1; i >= 0; i--) {
     const b = uiButtons[i];
     if (inButton(u, b)) { if (b.onLift) liftButton = b; else b.action(); return; }
@@ -1285,7 +1286,9 @@ function flickMug(e) {
   Body.setAngularVelocity(m, dx > 0 ? 0.2 : -0.2);
   m.game.swiped = true;
 }
+let menuPointer = null;             // home screen: last finger/mouse spot, so the cats can look at it
 canvas.addEventListener('pointermove', e => {
+  if (state === 'menu') menuPointer = { ...toUI(e), f: frame };
   if (mugGrab) { flickMug(e); return; }
   if (dragging) updatePull(toWorld(e));
   else if (panning) { cam.x = clampCamX(panning.cx - (e.clientX - panning.sx) * dpr / worldScale); panIdle = 0; }
@@ -1438,13 +1441,16 @@ function furFlicks(R, count, seed, light, dark, keepClear) {
 }
 // lid: 0 = wide open, ~0.5 = half closed. tilt > 0 slants the lid down toward the nose (cross / unimpressed).
 let sleepyEyes = false;            // set while drawing a sleeping cat: lids all the way down
+// set by catLife() for the cat being drawn: a blink in progress, and where she's looking (-1..1 each way)
+let blinkNow = false, eyeLook = { x: 0, y: 0 };
 function catEye(ex, ey, w, h, s, color, lid, tilt, lidColor) {
-  if (sleepyEyes) { lid = 0.92; tilt = 0; }
+  if (sleepyEyes || blinkNow) { lid = 0.92; tilt = 0; }
+  const lx = eyeLook.x * w * 0.4, ly = eyeLook.y * h * 0.35;
   ctx.save();
   ctx.beginPath(); ctx.ellipse(ex, ey, w, h, 0, 0, 7); ctx.clip();
   ctx.fillStyle = color; ctx.fillRect(ex - w, ey - h, w * 2, h * 2);
-  ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.ellipse(ex + s * w * 0.12, ey + h * 0.1, w * 0.3, h * 0.75, 0, 0, 7); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex - w * 0.3, ey - h * 0.25, w * 0.22, 0, 7); ctx.fill();
+  ctx.fillStyle = '#141414'; ctx.beginPath(); ctx.ellipse(ex + s * w * 0.12 * (1 - Math.abs(eyeLook.x)) + lx, ey + h * 0.1 + ly, w * 0.3, h * 0.75, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex - w * 0.3 + lx * 0.5, ey - h * 0.25 + ly * 0.5, w * 0.22, 0, 7); ctx.fill();
   if (lid === 0) { ctx.beginPath(); ctx.arc(ex + w * 0.28, ey + h * 0.35, w * 0.11, 0, 7); ctx.fill(); }   // extra sparkle for bright eyes
   if (lid > 0) {
     // upper lid in fur colour, with its lower edge slanted
@@ -1563,7 +1569,14 @@ function whiskers(R, y, len, color) {
     ctx.quadraticCurveTo(s * R * 0.7, y - R * 0.07 + k * R * 0.1, s * R * len, y - R * 0.1 + k * R * 0.16); ctx.stroke();
   }
 }
+let earTwitch = { side: 0, amt: 0 };   // set by catLife(): which ear flicks, and how far
 function ear(R, s, base1, tip, base2, fur, inner, tufts) {
+  const tw = earTwitch.side === s ? earTwitch.amt : 0;
+  if (tw) { ctx.save(); const px = s * base2[0] * R, py = base2[1] * R; ctx.translate(px, py); ctx.rotate(s * 0.35 * tw); ctx.translate(-px, -py); }
+  earInner(R, s, base1, tip, base2, fur, inner, tufts);
+  if (tw) ctx.restore();
+}
+function earInner(R, s, base1, tip, base2, fur, inner, tufts) {
   ctx.fillStyle = fur; ctx.strokeStyle = 'rgba(60,50,45,0.45)'; ctx.lineWidth = R * 0.03; ctx.lineJoin = 'round';
   ctx.beginPath(); ctx.moveTo(s * base1[0] * R, base1[1] * R); ctx.lineTo(s * tip[0] * R, tip[1] * R); ctx.lineTo(s * base2[0] * R, base2[1] * R); ctx.closePath(); ctx.fill(); ctx.stroke();
   // inner ear: the same triangle shrunk toward its middle, leaving a rim of fur
@@ -1742,17 +1755,40 @@ function drawFlyer(x, y, r, vel, type, alpha = 1, mood = 'yowl') {
   drawCat(x, y, r, (flip ? -1 : 1) * ang * 0.5, type, { alpha, mood });
 }
 
+// Little signs of life on every cat: she blinks (now and then a double blink), her eyes drift and glance
+// around, she breathes, her head tilts a touch, and an ear flicks once in a while. Each cat has her own
+// rhythm. opts.lookX/lookY (-1..1) make her look at something; opts.still turns it all off.
+const CAT_LIFE = { baby: { seed: 0, blink: 170, breathe: 0.055 }, cleo: { seed: 61, blink: 215, breathe: 0.045 }, cece: { seed: 137, blink: 260, breathe: 0.032 } };
+function catLife(type, opts) {
+  const L = CAT_LIFE[type], t = frame + L.seed + (opts.seed || 0), m = opts.mood;
+  const idle = !opts.still && !sleepyEyes;
+  const c = t % L.blink, cyc = Math.floor(t / L.blink);
+  blinkNow = idle && (!m || m === 'fierce' || m === 'sad') && (c < 6 || (hash(cyc * 1.7) > 0.6 && c > 10 && c < 16));
+  if (opts.lookX != null || opts.lookY != null) eyeLook = { x: opts.lookX || 0, y: opts.lookY || 0 };
+  else if (idle && !m) {
+    // hold a gaze for a couple of seconds, then flick to a new spot
+    const seg = Math.floor(t / 150), k = Math.min(1, (t % 150) / 10), e = k * k * (3 - 2 * k);
+    const gx = q => (hash(q * 3.1 + L.seed) - 0.5) * 1.6, gy = q => (hash(q * 5.7 + L.seed) - 0.5) * 0.9;
+    eyeLook = { x: gx(seg - 1) + (gx(seg) - gx(seg - 1)) * e, y: gy(seg - 1) + (gy(seg) - gy(seg - 1)) * e };
+  } else eyeLook = { x: 0, y: 0 };
+  const tc = t % 330;
+  earTwitch = idle && m !== 'yowl' && tc < 14 ? { side: hash(Math.floor(t / 330) * 2.3) > 0.5 ? 1 : -1, amt: Math.sin(tc / 14 * Math.PI) } : { side: 0, amt: 0 };
+  const calmish = idle && m !== 'yowl' && m !== 'dizzy';
+  return { breath: calmish ? Math.sin(t * L.breathe) : 0, tilt: idle && !m ? Math.sin(t * 0.011 + L.seed) * 0.05 : 0 };
+}
 function drawCat(x, y, r, ang, type, opts = {}) {
   opts = { bright: true, ...opts };   // bright, wide-open eyes everywhere
-  const t = CATS[type];
+  const t = CATS[type], life = catLife(type, opts);
   ctx.save();
-  ctx.translate(x, y); ctx.rotate(ang);
+  ctx.translate(x, y); ctx.rotate(ang + life.tilt);
+  if (life.breath) { ctx.translate(0, r * 0.9); ctx.scale(1 - 0.012 * life.breath, 1 + 0.022 * life.breath); ctx.translate(0, -r * 0.9); }   // breathing: she rises a little from the bottom
   if (opts.alpha != null) ctx.globalAlpha *= opts.alpha;
   if (type === 'cece') drawCeCe(r, t, opts);
   else if (type === 'baby') drawBaby(r, t, opts);
   else drawCleo(r, t, opts);
   ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
   ctx.restore();
+  blinkNow = false; eyeLook = { x: 0, y: 0 }; earTwitch = { side: 0, amt: 0 };
 }
 
 // The raccoons enjoy what they stole while they wait: nibbling a fish treat, munching from a bag of
@@ -2221,7 +2257,9 @@ function drawWorld() {
   // waiting cats sit in line behind the slingshot
   queueSpots().forEach((q, i) => {
     const bob = Math.sin(frame * 0.05 + i) * 2 - chatterHop(i + 1);
-    drawCat(q.x, q.y + bob, q.r, 0, q.type, { calm: !chatterAt(i + 1), ...(winTimer > 0 ? { mood: 'happy' } : chatterMood(i + 1)) });
+    const lead = flying.find(c => !c.game.done), watch = lead && !chatterAt(i + 1)
+      ? { lookX: Math.max(-1, Math.min(1, (lead.position.x - q.x) / 400)), lookY: Math.max(-1, Math.min(1, (lead.position.y - q.y) / 300)) } : {};
+    drawCat(q.x, q.y + bob, q.r, 0, q.type, { calm: !chatterAt(i + 1), ...watch, ...(winTimer > 0 ? { mood: 'happy' } : chatterMood(i + 1)) });
     chatterBubble(i + 1, q.x + q.r * 0.3, GROUND - q.r * 2.3 + bob);
   });
   drawLaser();
@@ -2263,7 +2301,7 @@ function drawWorld() {
     else if (g.kind === 'cat') {
       const posed = g.type !== 'cece' && Vector.magnitude(b.velocity) > 2.5;
       if (g.prancing || g.clone) {
-        g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, posed ? 0 : b.angle, g.type, { mood: 'yowl' }); });
+        g.trail.forEach((p, i) => { ctx.globalAlpha = (i / g.trail.length) * 0.35; drawCat(p.x, p.y, g.r * 0.9, posed ? 0 : b.angle, g.type, { mood: 'yowl', still: true }); });
         ctx.globalAlpha = 1;
       } else {
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
@@ -2290,7 +2328,7 @@ function drawWorld() {
     const hop = dragging ? 0 : chatterHop(0);
     // her face: scared when the band creaks or snaps, fiercer the further she's pulled, else her chatter face
     const face = bandSnapped || snapStrain > 0 || strain > 0.5 ? { mood: 'scared' }
-      : dragging ? { mood: 'fierce', k: Math.min(1, Math.hypot(pull.x, pull.y) / MAX_PULL) } : chatterMood(0);
+      : dragging ? { mood: 'fierce', k: Math.min(1, Math.hypot(pull.x, pull.y) / MAX_PULL), lookX: 0.75, lookY: -0.2 } : chatterMood(0);
     drawCat(tip.x, tip.y - hop, CATS[current].r, 0, current, face);
     chatterBubble(0, tip.x + CATS[current].r * 0.4, tip.y - hop - CATS[current].r * 1.75);
     if (!bandSnapped) band(SLING.x - 24 + sj.x, 646 + sj.y, tip.x - 6, tip.y, strain);
@@ -2620,7 +2658,9 @@ function drawMenu() {
   for (const [type, x, y, r] of [['cece', 800, 612, 132], ['baby', 548, 650, 84], ['cleo', 1052, 646, 92]]) {
     uiButtons.push({ x: x + uiShift, y: y + 36, w: r * 2, h: r * 2.2, action: tapCat(type) });
   }
-  const menuFace = type => hopOf(type) > 0 ? { mood: 'happy' } : {};
+  const lookAt = (x, y) => menuPointer && frame - menuPointer.f < 180
+    ? { lookX: Math.max(-1, Math.min(1, (menuPointer.x - uiShift - x) / 350)), lookY: Math.max(-1, Math.min(1, (menuPointer.y - y) / 300)) } : {};
+  const menuFace = type => hopOf(type) > 0 ? { mood: 'happy' } : lookAt(type === 'baby' ? 548 : type === 'cece' ? 800 : 1052, 660);
   drawCat(800, 648 + bob(1) - hopOf('cece'), 132, 0, 'cece', menuFace('cece'));
   drawCat(548, 686 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', menuFace('baby'));
   drawCat(1052, 682 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', menuFace('cleo'));

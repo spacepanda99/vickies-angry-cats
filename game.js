@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 62;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 63;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -725,9 +725,13 @@ function makeCat(type, x, y, r) {
 
 // the day goes by as you play: high noon on level 1, sunset by level 14, night after that
 const levelTime = i => LEVELS[i].night ? 1 : Math.min(1, i / 13);
+// portraits of the family's own cats on the wall: a couple per level, rotating so everyone gets a turn
+const PORTRAIT_LEVELS = [['pumpkin'], ['hope'], ['stubby'], ['lucky'], ['romeo'], ['pumpkin', 'hope'], ['stubby', 'lucky'], ['romeo'],
+  ['pumpkin'], ['hope', 'stubby'], ['lucky', 'romeo'], ['pumpkin'], ['hope'], ['stubby', 'romeo'], ['lucky'], ['pumpkin', 'hope']];
 function loadLevel(i) {
   levelIdx = i; finale = null;
-  setBackdropTime(levelTime(i));
+  PORTRAITS_NOW = PORTRAIT_LEVELS[i] || [];
+  setBackdropTime(levelTime(i), PORTRAITS_NOW.join());
   newEngine();
   const lv = { blocks: [], raccoons: [], loot: [], floats: [], bubbles: [], portals: [], vacs: [], swings: [] };
   LEVELS[i].build(lv);

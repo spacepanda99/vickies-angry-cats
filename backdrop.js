@@ -133,9 +133,89 @@ function buildFar(tod = 0) {
   pic(735, 200, 150, 120, '#ffe2c4', '#f6b48f');
   pic(760, 360, 100, 80, '#d9e8ff', '#a9c4f0');
   pic(1580, 230, 140, 170, '#ffeec9', '#a8d9a0');
+  // framed portraits of the family's own cats, hung on the clear wall between the windows (which ones depends on the level)
+  PORTRAITS_NOW.slice(0, 2).forEach((kind, i) => paintPortrait(g, 745 + i * 115, 508, 100, 100, kind));
   const hz = parseInt(keyed(TOD.haze, tod).slice(1), 16);
   haze(L, `rgba(${hz >> 16},${(hz >> 8) & 255},${hz & 255},0.35)`);
   return L;
+}
+
+// ---- portraits of the family's cats. They don't have to be accurate: a framed cartoon face with a name plate.
+let PORTRAITS_NOW = [];   // the kinds hung on the wall for the current level (set by game.js before the far wall is rebuilt)
+const PORTRAIT_CATS = {
+  pumpkin: { name: 'Pumpkin', bg: '#cfe3d2', fur: '#e8933f', mark: '#b9631f', light: '#f9dcae', eye: '#8fc96a', rx: 1.0, stripes: true },
+  stubby:  { name: 'Stubby',  bg: '#e6d8ef', fur: '#f0a752', mark: '#cf8330', light: '#fce3bb', eye: '#d9a33a', rx: 1.1, stripes: true, flat: true, fluff: true },
+  hope:    { name: 'Hope',    bg: '#d6e4f3', fur: '#26262d', mark: '#0e0e12', light: '#4a4a56', eye: '#e8a92e', rx: 1.2, black: true, chubby: true },
+  lucky:   { name: 'Lucky',   bg: '#f1e2cf', fur: '#2a2a31', mark: '#0e0e12', light: '#4f4f5b', eye: '#d6c93e', rx: 0.98, black: true },
+  romeo:   { name: 'Romeo',   bg: '#dbe9d6', fur: '#202026', mark: '#0e0e12', light: '#4a4a56', eye: '#a9cf5c', rx: 1.24, tux: true, chubby: true },
+};
+function paintPortrait(g, x, y, w, h, kind) {
+  const c = PORTRAIT_CATS[kind];
+  if (!c) return;
+  g.save();
+  g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 4, y + 5, w, h);                       // soft shadow on the wall
+  g.fillStyle = '#7a5230'; g.fillRect(x, y, w, h);                                       // frame
+  g.fillStyle = '#9b6c40'; g.fillRect(x + 3, y + 3, w - 6, h - 6);
+  g.fillStyle = '#f7efe1'; g.fillRect(x + 8, y + 8, w - 16, h - 28);                     // mat
+  const px = x + 13, py = y + 13, pw = w - 26, ph = h - 38;                              // the picture itself
+  g.beginPath(); g.rect(px, py, pw, ph); g.clip();
+  g.fillStyle = c.bg; g.fillRect(px, py, pw, ph);
+  const cx = x + w / 2, cy = py + ph * 0.54, r = Math.min(pw, ph) * 0.36;
+  portraitCat(g, cx, cy, r, c);
+  g.restore();
+  // brass name plate
+  g.fillStyle = '#d9b45a'; g.fillRect(x + w / 2 - 30, y + h - 17, 60, 12);
+  g.strokeStyle = '#8a6a22'; g.lineWidth = 1; g.strokeRect(x + w / 2 - 30, y + h - 17, 60, 12);
+  g.fillStyle = '#4a3512'; g.font = "700 10px 'Trebuchet MS', 'Segoe UI', sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(c.name, x + w / 2, y + h - 11);
+  g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+}
+function portraitCat(g, cx, cy, r, c) {
+  const rx = r * c.rx, ry = r * (c.chubby ? 0.95 : 0.9);
+  const ell = (x, y, a, b, col) => { g.fillStyle = col; g.beginPath(); g.ellipse(x, y, a, b, 0, 0, 7); g.fill(); };
+  // shoulders (chubby cats show more of them)
+  ell(cx, cy + ry * 1.05, rx * (c.chubby ? 1.25 : 0.9), ry * 0.7, c.fur);
+  if (c.tux) ell(cx, cy + ry * 1.0, rx * 0.5, ry * 0.55, '#f7f5ef');                       // white bib
+  // ears
+  for (const sg of [-1, 1]) {
+    g.fillStyle = c.fur; g.beginPath(); g.moveTo(cx + sg * rx * 0.28, cy - ry * 0.72); g.lineTo(cx + sg * rx * 0.86, cy - ry * 1.34); g.lineTo(cx + sg * rx * 0.98, cy - ry * 0.3); g.closePath(); g.fill();
+    g.fillStyle = c.black || c.tux ? '#7a4a58' : '#f2a7a0'; g.beginPath(); g.moveTo(cx + sg * rx * 0.4, cy - ry * 0.74); g.lineTo(cx + sg * rx * 0.78, cy - ry * 1.12); g.lineTo(cx + sg * rx * 0.86, cy - ry * 0.45); g.closePath(); g.fill();
+  }
+  // head (a fluffy cat gets a scalloped, fuzzy edge)
+  if (c.fluff) for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; ell(cx + Math.cos(a) * rx * 0.97, cy + Math.sin(a) * ry * 0.97, r * 0.16, r * 0.16, c.fur); }
+  ell(cx, cy, rx, ry, c.fur);
+  if (c.chubby) { ell(cx - rx * 0.62, cy + ry * 0.32, rx * 0.4, ry * 0.46, c.fur); ell(cx + rx * 0.62, cy + ry * 0.32, rx * 0.4, ry * 0.46, c.fur); }   // round cheeks
+  // markings
+  if (c.stripes) {
+    g.strokeStyle = c.mark; g.lineWidth = r * 0.07; g.lineCap = 'round';
+    for (const dx of [-0.2, 0, 0.2]) { g.beginPath(); g.moveTo(cx + dx * rx, cy - ry * 0.95); g.lineTo(cx + dx * rx * 0.9, cy - ry * 0.5); g.stroke(); }
+    for (const sg of [-1, 1]) for (const dy of [0.05, 0.25]) { g.beginPath(); g.moveTo(cx + sg * rx * 0.98, cy + ry * dy); g.lineTo(cx + sg * rx * 0.72, cy + ry * (dy + 0.04)); g.stroke(); }
+  }
+  if (c.tux) {
+    ell(cx, cy + ry * 0.42, rx * 0.5, ry * 0.46, '#f7f5ef');                               // white muzzle and chin
+    g.fillStyle = '#f7f5ef'; g.beginPath(); g.moveTo(cx - rx * 0.1, cy - ry * 0.9); g.lineTo(cx + rx * 0.1, cy - ry * 0.9); g.lineTo(cx + rx * 0.22, cy + ry * 0.3); g.lineTo(cx - rx * 0.22, cy + ry * 0.3); g.closePath(); g.fill();   // the blaze
+  } else if (c.black) {
+    g.strokeStyle = c.light; g.lineWidth = r * 0.07; g.lineCap = 'round'; g.beginPath(); g.ellipse(cx, cy, rx * 0.72, ry * 0.7, 0, Math.PI * 1.15, Math.PI * 1.55); g.stroke();   // glossy sheen
+  } else {
+    ell(cx, cy + ry * 0.4, rx * 0.5, ry * 0.4, c.light);                                   // pale muzzle
+  }
+  // eyes: a flat-faced cat's sit lower and closer together
+  const ex = rx * (c.flat ? 0.36 : 0.4), ey = cy - ry * (c.flat ? 0.0 : 0.12), ew = r * (c.black ? 0.24 : 0.2), eh = r * (c.black ? 0.26 : 0.22);
+  for (const sg of [-1, 1]) {
+    ell(cx + sg * ex, ey, ew, eh, c.eye);
+    ell(cx + sg * ex, ey, ew * (c.black ? 0.5 : 0.32), eh * 0.92, '#111');
+    ell(cx + sg * ex + ew * 0.25, ey - eh * 0.3, ew * 0.2, ew * 0.2, '#fff');
+  }
+  // nose and mouth (tiny and squashed for the flat face)
+  const ny = cy + ry * (c.flat ? 0.2 : 0.26), ns = r * (c.flat ? 0.1 : 0.14);
+  g.fillStyle = c.black ? '#3b2a30' : c.tux ? '#f08aa8' : '#f08a8a';
+  g.beginPath(); g.moveTo(cx - ns, ny); g.lineTo(cx + ns, ny); g.lineTo(cx, ny + ns * 0.9); g.closePath(); g.fill();
+  g.strokeStyle = c.black && !c.tux ? '#777' : '#6b4a3a'; g.lineWidth = r * 0.04; g.lineCap = 'round';
+  g.beginPath(); g.moveTo(cx, ny + ns * 0.9); g.quadraticCurveTo(cx - ns * 0.9, ny + ns * 2, cx - ns * 1.8, ny + ns * 1.4); g.moveTo(cx, ny + ns * 0.9); g.quadraticCurveTo(cx + ns * 0.9, ny + ns * 2, cx + ns * 1.8, ny + ns * 1.4); g.stroke();
+  // whiskers
+  g.strokeStyle = c.black && !c.tux ? 'rgba(220,220,230,0.75)' : 'rgba(255,255,255,0.85)'; g.lineWidth = r * 0.025;
+  for (const sg of [-1, 1]) for (const dy of [-0.05, 0.08]) { g.beginPath(); g.moveTo(cx + sg * rx * 0.5, ny + ry * dy); g.lineTo(cx + sg * rx * 1.15, ny + ry * (dy * 3 - 0.05)); g.stroke(); }
+  g.lineCap = 'butt';
 }
 
 function buildMid() {
@@ -222,10 +302,10 @@ function buildFront() {
   return L;
 }
 
-// rebuild the far wall (windows, sun, sky) for a new time of day; cheap enough to do once per level
-function setBackdropTime(t) {
-  if (BACKDROP.far && Math.abs(t - (BACKDROP.tod || 0)) < 0.001) return;
-  BACKDROP.tod = t; BACKDROP.far = buildFar(t);
+// rebuild the far wall (windows, sun, sky, portraits) for a new time of day or a new set of portraits; cheap enough to do once per level
+function setBackdropTime(t, key = '') {
+  if (BACKDROP.far && Math.abs(t - (BACKDROP.tod || 0)) < 0.001 && key === BACKDROP.key) return;
+  BACKDROP.tod = t; BACKDROP.key = key; BACKDROP.far = buildFar(t);
 }
 function initBackdrop() {
   BACKDROP.tod = 0;

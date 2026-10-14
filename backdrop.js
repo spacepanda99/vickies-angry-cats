@@ -131,12 +131,11 @@ function buildFar(tod = 0) {
     g.fillStyle = hill; g.beginPath(); g.ellipse(x + w / 2, y + h - 10, w * 0.45, h * 0.3, 0, Math.PI, 0); g.fill();
   };
   pic(735, 200, 150, 120, '#ffe2c4', '#f6b48f');
-  pic(760, 360, 100, 80, '#d9e8ff', '#a9c4f0');
   pic(1580, 230, 140, 170, '#ffeec9', '#a8d9a0');
   // framed portraits of the family's own cats, hung on the clear wall between the windows (which ones depends on the level)
-  PORTRAITS_NOW.slice(0, 2).forEach((kind, i) => paintPortrait(g, 745 + i * 115, 508, 100, 100, kind));
   const hz = parseInt(keyed(TOD.haze, tod).slice(1), 16);
   haze(L, `rgba(${hz >> 16},${(hz >> 8) & 255},${hz & 255},0.35)`);
+  PORTRAITS_NOW.slice(0, 2).forEach((kind, i) => paintPortrait(g, 727 + i * 132, 430, 128, 160, kind));   // mid-wall, clear of the hint pill and the sofa
   return L;
 }
 
@@ -156,18 +155,20 @@ function paintPortrait(g, x, y, w, h, kind) {
   g.fillStyle = 'rgba(0,0,0,0.18)'; g.fillRect(x + 4, y + 5, w, h);                       // soft shadow on the wall
   g.fillStyle = '#7a5230'; g.fillRect(x, y, w, h);                                       // frame
   g.fillStyle = '#9b6c40'; g.fillRect(x + 3, y + 3, w - 6, h - 6);
-  g.fillStyle = '#f7efe1'; g.fillRect(x + 8, y + 8, w - 16, h - 28);                     // mat
-  const px = x + 13, py = y + 13, pw = w - 26, ph = h - 38;                              // the picture itself
+  g.fillStyle = '#f7efe1'; g.fillRect(x + 8, y + 8, w - 16, h - 52);                     // mat
+  const px = x + 13, py = y + 13, pw = w - 26, ph = h - 62;                              // the picture itself
   g.beginPath(); g.rect(px, py, pw, ph); g.clip();
   g.fillStyle = c.bg; g.fillRect(px, py, pw, ph);
   const cx = x + w / 2, cy = py + ph * 0.54, r = Math.min(pw, ph) * 0.36;
   portraitCat(g, cx, cy, r, c);
   g.restore();
   // brass name plate
-  g.fillStyle = '#d9b45a'; g.fillRect(x + w / 2 - 30, y + h - 17, 60, 12);
-  g.strokeStyle = '#8a6a22'; g.lineWidth = 1; g.strokeRect(x + w / 2 - 30, y + h - 17, 60, 12);
-  g.fillStyle = '#4a3512'; g.font = "700 10px 'Trebuchet MS', 'Segoe UI', sans-serif"; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(c.name, x + w / 2, y + h - 11);
+  g.fillStyle = '#e6c264'; g.fillRect(x + 8, y + h - 38, w - 16, 30);
+  g.strokeStyle = '#7a5a18'; g.lineWidth = 2; g.strokeRect(x + 8, y + h - 38, w - 16, 30);
+  g.fillStyle = '#3a280a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let fs = 26; g.font = "800 " + fs + "px 'Trebuchet MS', 'Segoe UI', sans-serif";
+  while (g.measureText(c.name).width > w - 28 && fs > 14) { fs--; g.font = "800 " + fs + "px 'Trebuchet MS', 'Segoe UI', sans-serif"; }
+  g.fillText(c.name, x + w / 2, y + h - 22);
   g.textAlign = 'start'; g.textBaseline = 'alphabetic';
 }
 function portraitCat(g, cx, cy, r, c) {

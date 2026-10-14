@@ -5,7 +5,7 @@
 // Uses GROUND, WORLD_W and hash() from game.js (only called after game.js has loaded).
 
 const BACKDROP = { top: -400, bottom: 1000, far: null, mid: null, front: null };
-const FAR_P = 0.3, MID_P = 0.6;            // how much of the camera movement each layer follows
+const FAR_P = 1, MID_P = 1;                // how much of the camera movement each layer follows: 1 = fixed in the room (the walls, windows, portraits and furniture stay put; only the camera moves)
 
 function makeLayer(w, scale) {
   const c = document.createElement('canvas');
@@ -55,7 +55,7 @@ function palm(g, x, base, h, color) {
 }
 
 function buildFar(tod = 0) {
-  const L = makeLayer(1800, 1), g = L.g, W = L.w;
+  const L = makeLayer(WORLD_W, 1), g = L.g, W = L.w;
   // wall
   let gr = g.createLinearGradient(0, BACKDROP.top, 0, GROUND);
   gr.addColorStop(0, '#e4f4ef'); gr.addColorStop(1, '#c4e4dd');
@@ -79,31 +79,7 @@ function buildFar(tod = 0) {
   // big windows looking out on a sunny garden (a nod to the outdoor Angry Birds scenery)
   for (const wx of [230, 1060]) {
     const wy = 110, ww = 420, wh = 400;
-    gr = g.createLinearGradient(0, wy, 0, wy + wh);
-    gr.addColorStop(0, keyed(TOD.skyTop, tod)); gr.addColorStop(1, keyed(TOD.skyLow, tod));
-    g.fillStyle = gr; g.fillRect(wx, wy, ww, wh);
-    // the sun: high in the left window at noon, sinking toward the hills by sunset (behind them at the very end)
-    if (wx === 230) {
-      const sx = wx + 130 - tod * 30, sy = wy + 200 + tod * 78, sr = 34 + tod * 10, sc = keyed(TOD.sun, tod);   // y range is the part of the window you can see in play
-      g.save(); g.beginPath(); g.rect(wx, wy, ww, wh); g.clip();
-      const sg = g.createRadialGradient(sx, sy, sr * 0.5, sx, sy, sr * (3 + tod * 2));
-      sg.addColorStop(0, sc + 'cc'); sg.addColorStop(1, sc + '00');
-      g.fillStyle = sg; g.beginPath(); g.arc(sx, sy, sr * (3 + tod * 2), 0, 7); g.fill();
-      g.fillStyle = sc; g.beginPath(); g.arc(sx, sy, sr, 0, 7); g.fill();
-      g.restore();
-    }
-    g.fillStyle = keyed(TOD.cloud, tod); g.globalAlpha = 0.95;
-    cloud(g, wx + 70, wy + 80, 1.1); cloud(g, wx + 260, wy + 50, 0.8); cloud(g, wx + 300, wy + 150, 0.6);
-    g.globalAlpha = 1;
-    g.fillStyle = keyed(TOD.hill, tod);
-    g.beginPath(); g.moveTo(wx, wy + wh);
-    for (let x = 0; x <= ww; x += 20) g.lineTo(wx + x, wy + wh - 120 - Math.sin(x / 60 + wx) * 30);
-    g.lineTo(wx + ww, wy + wh); g.closePath(); g.fill();
-    g.fillStyle = keyed(TOD.hillDark, tod);
-    for (const [dx, r] of [[60, 46], [130, 34], [330, 52], [390, 30]]) blob(g, wx + dx, wy + wh - 70, r);
-    palm(g, wx + 210, wy + wh - 20, 170, keyed(TOD.palm, tod));
-    palm(g, wx + 280, wy + wh - 10, 120, hexMix(keyed(TOD.palm, tod), '#ffffff', 0.08));
-    g.fillStyle = keyed(TOD.hill, tod); g.fillRect(wx, wy + wh - 40, ww, 40);
+    g.clearRect(wx, wy, ww, wh);   // a hole: the view outside is drawn behind the wall (drawOutsideDay)
     // frame, bars, sill
     g.strokeStyle = '#ffffff'; g.lineWidth = 18; g.strokeRect(wx, wy, ww, wh);
     g.lineWidth = 9;
@@ -220,7 +196,7 @@ function portraitCat(g, cx, cy, r, c) {
 }
 
 function buildMid() {
-  const L = makeLayer(2200, 1.25), g = L.g;
+  const L = makeLayer(WORLD_W, 1.25), g = L.g;
   const F = GROUND;
   // bookshelf
   g.fillStyle = '#c99f77'; g.fillRect(40, 440, 230, F - 440);
@@ -315,9 +291,48 @@ function initBackdrop() {
   BACKDROP.front = buildFront();
 }
 
+// The view outside the windows. The room (walls, windows, furniture) stays fixed in the world; only what's out there slides
+// as the camera moves, each layer at its own slow speed (the sun barely moves, the nearer palms drift a little more).
+// OUT_Q is how much of the camera's movement a layer follows on screen (1 = fixed in the world, 0 = stuck to the screen).
+const OUT_Q = { sun: 0.03, cloud: 0.06, hill: 0.12, palm: 0.2 };
+function drawOutsideDay(camX) {
+  const tod = BACKDROP.tod || 0, wy = 110, ww = 420, wh = 400, shift = q => (1 - q) * camX;
+  const palmCol = keyed(TOD.palm, tod), palmCol2 = hexMix(palmCol, '#ffffff', 0.08);
+  for (const wx of [230, 1060]) {
+    const tiles = (sh, P, fn) => { const k0 = Math.floor((wx - 230 - sh - 140) / P), k1 = Math.floor((wx + ww - 230 - sh) / P); for (let k = k0; k <= k1; k++) fn(230 + k * P + sh); };
+    ctx.save(); ctx.beginPath(); ctx.rect(wx, wy, ww, wh); ctx.clip();
+    const gr = ctx.createLinearGradient(0, wy, 0, wy + wh);
+    gr.addColorStop(0, keyed(TOD.skyTop, tod)); gr.addColorStop(1, keyed(TOD.skyLow, tod));
+    ctx.fillStyle = gr; ctx.fillRect(wx, wy, ww, wh);
+    // the sun: high at noon, sinking toward the hills by sunset; it hardly moves, so the windows slide past it
+    const sx = 360 - tod * 30 + shift(OUT_Q.sun), sy = wy + 200 + tod * 78, sr = 34 + tod * 10, sc = keyed(TOD.sun, tod);
+    const sg = ctx.createRadialGradient(sx, sy, sr * 0.5, sx, sy, sr * (3 + tod * 2));
+    sg.addColorStop(0, sc + 'cc'); sg.addColorStop(1, sc + '00');
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, sr * (3 + tod * 2), 0, 7); ctx.fill();
+    ctx.fillStyle = sc; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, 7); ctx.fill();
+    ctx.fillStyle = keyed(TOD.cloud, tod); ctx.globalAlpha = 0.95;
+    tiles(shift(OUT_Q.cloud), 830, ox => { cloud(ctx, ox + 70, wy + 80, 1.1); cloud(ctx, ox + 260, wy + 50, 0.8); cloud(ctx, ox + 300, wy + 150, 0.6); cloud(ctx, ox + 560, wy + 110, 0.9); });
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = keyed(TOD.hill, tod);
+    const hs = shift(OUT_Q.hill);
+    ctx.beginPath(); ctx.moveTo(wx, wy + wh);
+    for (let x = 0; x <= ww; x += 20) ctx.lineTo(wx + x, wy + wh - 120 - Math.sin((wx + x - hs - 230) / 60 + 230) * 30);
+    ctx.lineTo(wx + ww, wy + wh); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = keyed(TOD.hillDark, tod);
+    tiles(hs, 630, ox => { for (const [dx, r] of [[60, 46], [130, 34], [330, 52], [390, 30]]) blob(ctx, ox + dx, wy + wh - 70, r); });
+    tiles(shift(OUT_Q.palm), 900, ox => {
+      palm(ctx, ox + 210, wy + wh - 20, 170, palmCol); palm(ctx, ox + 280, wy + wh - 10, 120, palmCol2);
+      palm(ctx, ox + 640, wy + wh - 16, 140, palmCol); palm(ctx, ox + 710, wy + wh - 8, 100, palmCol2);
+    });
+    ctx.fillStyle = keyed(TOD.hill, tod); ctx.fillRect(wx, wy + wh - 40, ww, 40);
+    ctx.restore();
+  }
+}
+
 // camX is the camera's left edge in world x. Call with the world transform already set.
 function drawBackdrop(camX) {
   const h = BACKDROP.bottom - BACKDROP.top;
+  drawOutsideDay(camX);   // behind the wall: it shows through the window holes
   for (const [L, p] of [[BACKDROP.far, FAR_P], [BACKDROP.mid, MID_P]]) {
     ctx.drawImage(L.c, camX * (1 - p), BACKDROP.top, L.w, h);
   }

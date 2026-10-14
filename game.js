@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 65;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 67;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1108,7 +1108,8 @@ function catchLaser() {
 // ---- cat Easter eggs: a bird at the window, a hairball, a purr, a toy mouse, a cat in the moon
 const BIRD = { x: 520, y: 500 };   // perched on the first window's sill (that layer scrolls slower than the room)
 const birdPos = () => ({ x: cam.x * (1 - FAR_P) + BIRD.x + bird.ox, y: BIRD.y + bird.oy });
-const moonPos = () => ({ x: cam.x * (1 - FAR_P) + WINDOWS[0].wx + 300, y: WINDOWS[0].wy + 265 });
+const moonPos = () => ({ x: WINDOWS[0].wx + 300 + 0.97 * cam.x, y: WINDOWS[0].wy + 265 });   // the moon barely moves on screen: the windows slide past it
+const inWindow = x => WINDOWS.some(w => x > w.wx + 10 && x < w.wx + w.ww - 10);
 function chatterAll(sym) { [current, ...queue].filter(Boolean).forEach((type, who) => chatter.push({ type, who, t: 1 + who * 6, life: CHATTER_LIFE, sym })); }
 function squeakMouse(m) {
   eggFlags.mouse = true;
@@ -1129,7 +1130,7 @@ function eggTap(p) {
   }
   if (isNight() && !moonCat) {
     const m = moonPos();
-    if (Math.hypot(p.x - m.x, p.y - m.y) < 64) {
+    if (inWindow(m.x) && Math.hypot(p.x - m.x, p.y - m.y) < 64) {
       moonCat = 420; sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.5, 0.1);
       eggBonus('The moon is a cat?!', 1000, m, 'Mew.');
       return true;
@@ -2409,16 +2410,24 @@ const isNight = () => LEVELS[levelIdx] && LEVELS[levelIdx].night;
 const hasFridge = () => LEVELS[levelIdx] && LEVELS[levelIdx].fridge;
 // window glass at night: deep blue sky, the moon, twinkling stars, a dark garden and a few fireflies
 function nightWindows() {
+  // the view outside slides slowly past the fixed windows (see OUT_Q in backdrop.js); NQ is how much of the camera each layer follows
+  const NQ = { star: 0.03, moon: 0.03, hill: 0.12, fly: 0.2 }, sh = q => (1 - q) * cam.x, SP = 1200;
+  const mod = (v, m) => ((v % m) + m) % m;
+  const moon = moonPos();
   for (const [i, w] of WINDOWS.entries()) {
-    const x = cam.x * (1 - FAR_P) + w.wx, y = w.wy;
+    const x = w.wx, y = w.wy;
     ctx.save(); ctx.beginPath(); ctx.rect(x, y, w.ww, w.wh); ctx.clip();
     const gr = ctx.createLinearGradient(0, y, 0, y + w.wh);
     gr.addColorStop(0, '#0b1240'); gr.addColorStop(1, '#2b3a7a');
     ctx.fillStyle = gr; ctx.fillRect(x, y, w.ww, w.wh);
-    for (let k = 0; k < 26; k++) { ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(frame * 0.03 + k * 7 + i)); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + hash(k * 3 + i) * w.ww, y + hash(k * 7 + i) * w.wh * 0.6, 2, 2); }
+    for (let k = 0; k < 70; k++) {
+      const rel = mod(hash(k * 3 + 1) * SP + sh(NQ.star), SP);
+      if (rel > w.ww) continue;
+      ctx.globalAlpha = 0.4 + 0.6 * Math.abs(Math.sin(frame * 0.03 + k * 7)); ctx.fillStyle = '#ffffff'; ctx.fillRect(x + rel, y + hash(k * 7 + 2) * w.wh * 0.6, 2, 2);
+    }
     ctx.globalAlpha = 1;
-    if (i === 0) {
-      const mx = x + 300, my = y + 265;
+    if (moon.x > x - 130 && moon.x < x + w.ww + 130) {
+      const mx = moon.x, my = moon.y;
       const mg = ctx.createRadialGradient(mx, my, 20, mx, my, 120); mg.addColorStop(0, 'rgba(220,235,255,0.45)'); mg.addColorStop(1, 'rgba(220,235,255,0)');
       ctx.fillStyle = mg; ctx.beginPath(); ctx.arc(mx, my, 120, 0, 7); ctx.fill();
       ctx.fillStyle = '#f4f1dc'; ctx.beginPath(); ctx.arc(mx, my, 42, 0, 7); ctx.fill();
@@ -2426,10 +2435,12 @@ function nightWindows() {
       if (moonCat > 0) drawMoonCat(mx, my);
     }
     ctx.fillStyle = '#101a33'; ctx.beginPath(); ctx.moveTo(x, y + w.wh);
-    for (let k = 0; k <= w.ww; k += 20) ctx.lineTo(x + k, y + w.wh - 110 - Math.sin(k / 60 + w.wx) * 28);
+    for (let k = 0; k <= w.ww; k += 20) ctx.lineTo(x + k, y + w.wh - 110 - Math.sin((x + k - sh(NQ.hill) - 230) / 60 + 230) * 28);
     ctx.lineTo(x + w.ww, y + w.wh); ctx.closePath(); ctx.fill();
-    for (let k = 0; k < 6; k++) {                                           // fireflies
-      const fx = x + (hash(k * 11 + i) * w.ww + Math.sin(frame * 0.01 + k) * 30), fy = y + w.wh - 60 - hash(k * 5 + i) * 120 + Math.cos(frame * 0.013 + k) * 15;
+    for (let k = 0; k < 14; k++) {                                          // fireflies
+      const rel = mod(hash(k * 11 + 3) * SP + sh(NQ.fly) + Math.sin(frame * 0.01 + k) * 30, SP);
+      if (rel > w.ww) continue;
+      const fx = x + rel, fy = y + w.wh - 60 - hash(k * 5 + 4) * 120 + Math.cos(frame * 0.013 + k) * 15;
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(frame * 0.05 + k * 2);
       const fg = ctx.createRadialGradient(fx, fy, 0, fx, fy, 10); fg.addColorStop(0, '#f6ff9a'); fg.addColorStop(1, 'rgba(246,255,154,0)');
       ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy, 10, 0, 7); ctx.fill();

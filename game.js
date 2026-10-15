@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 100;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 101;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -3161,7 +3161,7 @@ function drawHUD() {
     const d = Math.hypot(pull.x, pull.y);
     hint = bandSnapped ? 'Oops! Let go and watch her plop...' : snapStrain > 0 ? "It's creaking! Ease off!" : d > SNAP_PULL * 0.85 ? 'Easy... she\'s really heavy!' : null;
   } else if (state === 'play' && phase === 'flying' && !powerUsed && flying[0] && !flying[0].game.done) {
-    hint = flying[0].game.snapped ? "We're gonna need a stronger slingshot." : CATS[flying[0].game.type].hint;
+    hint = flying[0].game.snapped ? "We're gonna need a stronger slingshot!" : CATS[flying[0].game.type].hint;
   }
   if (hint) {
     ctx.font = `700 54px ${FONT}`;

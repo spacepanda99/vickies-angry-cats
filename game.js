@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 73;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 74;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1036,6 +1036,18 @@ function distToSegment(p, a, b) {
 
 // Magic cat flaps: anything that moves into one pops out of its partner at the same speed and heading.
 // It can't go back in the flap it came out of until it has left it, so nothing ping-pongs.
+// Level 16: the exit flap glows in the dark, and the first cat to come out of it flips on the lamp nearest it
+function portalLight(out) {
+  if (out.lit || !LEVELS[levelIdx].goggles) return;
+  out.lit = true;
+  let best = null, bd = Infinity;
+  for (const b of bodies()) {
+    if (!b.game || b.game.mat !== 'lamp' || b.game.on) continue;
+    const d = Math.hypot(b.position.x - out.x, b.position.y - out.y);
+    if (d < bd) { bd = d; best = b; }
+  }
+  if (best) switchLamp(best);
+}
 function updatePortals() {
   for (const q of portals) if (q.flap > 0) q.flap--;
   if (!portals.length) return;
@@ -1053,6 +1065,7 @@ function updatePortals() {
       sparkle({ x: q.x, y: q.y }, 8);
       Body.setPosition(b, { x: out.x, y: out.y }); Body.setVelocity(b, v);
       g.portalOut = q.link; q.flap = out.flap = 24;
+      if (g.kind === 'cat') portalLight(out);
       sparkle({ x: out.x, y: out.y }, 10);
       if (g.trail) g.trail.length = 0;
       sfx.tone('sine', 380, 1500, 0.22, 0.09); sfx.tone('triangle', 1500, 600, 0.18, 0.05, 0.12);
@@ -2621,6 +2634,12 @@ function nightLights() {
       L.push({ kind: 'pool', x, y: GROUND + 4, rx: 300 * k, ry: 26, rgb: '255,225,160', cut: 0.5 * k, glow: 0.2 * k });
     } else L.push({ kind: 'round', x, y, r: 80, rgb: '255,225,160', cut: 0.3, glow: 0.12 + 0.07 * Math.sin(frame * 0.08) });
   }
+  // the magic cat flaps glow: the exit (orange) much more than the entry, and it flares once a cat comes through
+  portals.forEach((q, i) => {
+    const pulse = 0.85 + 0.15 * Math.sin(frame * 0.07 + i * 2), exit = i % 2 === 1;
+    const k = exit ? (q.lit ? 1 : 0.7) : 0.45;
+    L.push({ kind: 'round', x: q.x, y: q.y, r: (exit ? 190 : 120) * (q.lit && exit ? 1.25 : 1) * pulse, rgb: q.glow, cut: 0.75 * k * pulse, glow: 0.22 * k * pulse });
+  });
   // a lookout's flashlight cone (if any)
   for (const b of lookouts()) {
     const a = flashAngle(b.game), r = b.game.r, ox = b.position.x + Math.cos(a) * r * 1.15, oy = b.position.y + Math.sin(a) * r * 1.15;

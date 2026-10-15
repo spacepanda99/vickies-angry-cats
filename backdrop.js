@@ -209,7 +209,7 @@ function cabinetDoor(g, x, y, w, h) {
   g.fillStyle = '#c99f77'; g.fillRect(x + 14, y + 12, w - 28, h - 24);
   g.strokeStyle = 'rgba(120,85,55,0.35)'; g.lineWidth = 2; g.strokeRect(x + 14, y + 12, w - 28, h - 24);
 }
-function paintCabinetTop(g, k) {
+function paintCabinetTop(g, k, jig = 0) {
   const { x, y, w, h } = CABINET, dw = w / 2;
   if (k <= 0) {
     for (const dx of [0, dw]) cabinetDoor(g, x + dx, y, dw, h);
@@ -221,7 +221,9 @@ function paintCabinetTop(g, k) {
   g.fillStyle = 'rgba(0,0,0,0.12)'; for (let bx = x + 26; bx < x + w; bx += 34) g.fillRect(bx, y, 3, h);
   g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, y, w, 10);
   g.fillStyle = '#7a5538'; g.fillRect(x, y + h - 6, w, 6);
-  paintBong(g, CABINET.bong.x + 30, y + h - 6);
+  // the bong rattles on its base while it bubbles (jig: 0 still .. 1 shaking hard)
+  const bx = CABINET.bong.x + 30, by = y + h - 6;
+  g.save(); g.translate(bx + (Math.random() - 0.5) * 3 * jig, by); g.rotate((Math.random() - 0.5) * 0.12 * jig); paintBong(g, 0, 0); g.restore();
   paintStashBag(g, x + 118, y + h - 66, 70, 60);
   // the doors swing out toward the room: foreshortened, their free edges a touch taller as they come nearer
   const th = k * 1.4, grow = 7 * Math.sin(th);
@@ -263,19 +265,19 @@ function paintStashBag(g, x, y, w, h) {
 }
 // the top of the cabinet while it's open (shut, it's just part of the furniture layer); hazed to match the furniture
 let cabinetCache = { k: -1, c: null };
-function drawCabinetTop(k, camX) {
+function drawCabinetTop(k, camX, jig = 0) {
   if (k <= 0) return;
   const { x, y, w, h } = CABINET, pad = 12, sc = 1.25;
-  if (cabinetCache.k !== k) {
+  if (cabinetCache.k !== k || jig > 0) {
     const c = cabinetCache.c || document.createElement('canvas');
     c.width = Math.round((w + pad * 2) * sc); c.height = Math.round((h + pad * 2) * sc);
     const g = c.getContext('2d');
     g.setTransform(sc, 0, 0, sc, 0, 0); g.translate(pad - x, pad - y);
-    paintCabinetTop(g, k);
+    paintCabinetTop(g, k, jig);
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(232,246,242,0.42)'; g.fillRect(0, 0, c.width, c.height);
     g.globalCompositeOperation = 'source-over';
-    cabinetCache = { k, c };
+    cabinetCache = { k: jig > 0 ? -1 : k, c };
   }
   ctx.drawImage(cabinetCache.c, x - pad + camX * (1 - MID_P), y - pad, w + pad * 2, h + pad * 2);
 }

@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 97;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 98;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -651,7 +651,7 @@ let perch = null, dangles = [];
 let eggBanner = null;               // the big 'you found an Easter egg' badge
 const EGG_LEN = 140;
 let cabinet = { k: 0, open: false };   // the cabinet's secret top doors (k: 0 shut .. 1 open)
-let stoned = null, smoke = 0, smokePuffs = [];   // after a bong hit: { base: score at launch } doubles the next shot; smoke 0..1 fills the room
+let stoned = null, smoke = 0, smokePuffs = [], bongShake = 0;   // after a bong hit: { base: score at launch } doubles the next shot; smoke 0..1 fills the room
 
 let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
@@ -779,7 +779,7 @@ function loadLevel(i) {
   settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
-  cabinet = { k: 0, open: false }; stoned = null; smoke = 0; smokePuffs = [];
+  cabinet = { k: 0, open: false }; stoned = null; smoke = 0; smokePuffs = []; bongShake = 0;
   eggFlags = {}; hairCount = 0; hairball = null; petHold = null; moonCat = 0;
   perch = lv.perch ? { ...lv.perch, x: lv.perch.x + FORT_X } : null;
   dangles = (lv.dangles || []).map(d => ({ ...d, x: d.x + FORT_X, caught: false }));
@@ -1192,6 +1192,7 @@ function hitBong() {
   if (stoned) return;
   stoned = { base: phase === 'flying' ? score : null };   // mid-shot it counts for the shot in the air, else the next one
   if (!sfx.playSample('bong', 1)) for (let i = 0; i < 14; i++) sfx.tone('sine', 140 + Math.random() * 90, 90, 0.09, 0.08, 0.3 + i * 0.09);   // bubbling
+  bongShake = 300;   // it rattles for as long as the 5-second hit plays
   music.duck(5, 0.08);   // nearly silent, so the gurgling comes through clearly
   eggBanner = { title: 'Use your stoney Jedi skills!', sub: 'Points are doubled', pts: 0, t: 0 };
 }
@@ -1203,6 +1204,7 @@ function settleStoned(pos) {
   if (gained > 0) { score += gained; popups.push({ x: pos.x, y: pos.y - 60, text: 'Stoney Jedi x2! +' + gained.toLocaleString(), life: 120, big: true }); }
 }
 function updateStash() {
+  if (bongShake > 0) bongShake--;
   cabinet.k = Math.max(0, Math.min(1, cabinet.k + (cabinet.open ? 1 : -1) / 18));
   smoke = Math.max(0, Math.min(1, smoke + (stoned ? 1 / 300 : -1 / 140)));
   // big soft clouds rolling out of the bong for the first few seconds
@@ -3776,7 +3778,7 @@ function render() {
   } else {
     ctx.setTransform(worldScale, 0, 0, worldScale, -cam.x * worldScale, -cam.y * worldScale);
     drawBackdrop(cam.x);
-    drawCabinetTop(cabinet.k, cam.x);
+    drawCabinetTop(cabinet.k, cam.x, bongShake > 0 ? Math.min(1, bongShake / 40, (300 - bongShake) / 10 + 0.3) : 0);
     const tod = levelTime(levelIdx);
     if (!isNight() && tod > 0.4) { ctx.fillStyle = `rgba(255,140,70,${(0.09 * (tod - 0.4) / 0.6).toFixed(3)})`; ctx.fillRect(cam.x - 50, BACKDROP.top, viewW + 100, BACKDROP.bottom - BACKDROP.top); }
     drawWorld();

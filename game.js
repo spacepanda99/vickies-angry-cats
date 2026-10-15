@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 77;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 79;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -537,7 +537,7 @@ const music = {
   update() {
     if (!sfx.ac) return;
     this.ensure();
-    const want = state === 'menu' || state === 'levels' || state === 'intro' ? 'menu' : levelTrack();
+    const want = state === 'menu' || state === 'levels' || state === 'intro' || state === 'outro' ? 'menu' : levelTrack();
     this.load(want);
     if (this.buffers[want]) this.load(want === 'menu' ? levelTrack() : 'menu');
     if ((this.current && this.current.name === want) || !this.buffers[want]) return;
@@ -1226,6 +1226,7 @@ function step() {
   popups = popups.filter(p => p.life > 0);
 
   if (state === 'intro') { updateIntro(); return; }
+  if (state === 'outro') { updateOutro(); return; }
   if (!engine || state === 'menu' || state === 'levels') return;
   // balloons: hover their platform near its height; once any balloon pops the rest can't hold it up
   for (const f of floats) {
@@ -1375,7 +1376,7 @@ function finishWin() {
   bestStars[levelIdx] = Math.max(bestStars[levelIdx] || 0, stars);
   saveStars();
   // the last level goes straight back to the level picker, with a congratulations ribbon across the top
-  if (levelIdx === LEVELS.length - 1) { state = 'levels'; finale = { t: 0 }; codePad = null; }
+  if (levelIdx === LEVELS.length - 1) startOutro();
   else state = 'won';
   sfx.win(); music.duck(3.2); sfx.cat(CAT_SOUNDS.win, 0.55, 2.6);
 }
@@ -1438,6 +1439,7 @@ canvas.addEventListener('pointerdown', e => {
   sfx.init();
   const u = toUI(e);
   if (state === 'intro') { if (intro && intro.t > 20) endIntro(); return; }
+  if (state === 'outro') { if (outro && outro.t > 20) endOutro(); return; }
   if (state === 'menu') menuPointer = { ...u, f: frame };
   for (let i = uiButtons.length - 1; i >= 0; i--) {
     const b = uiButtons[i];
@@ -2636,6 +2638,8 @@ function nightLights() {
       L.push({ kind: 'pool', x, y: GROUND + 4, rx: 300 * k, ry: 26, rgb: '255,225,160', cut: 0.5 * k, glow: 0.2 * k });
     } else L.push({ kind: 'round', x, y, r: 80, rgb: '255,225,160', cut: 0.3, glow: 0.12 + 0.07 * Math.sin(frame * 0.08) });
   }
+  // the closing cut scene: moonlight pours in through the window so you can see the chase
+  if (state === 'outro') L.push({ kind: 'round', x: 600, y: 640, r: 620, rgb: '170,190,255', cut: 0.62, glow: 0.05 });
   // the magic cat flaps glow: the exit (orange) much more than the entry, and it flares once a cat comes through
   portals.forEach((q, i) => {
     const pulse = 0.85 + 0.15 * Math.sin(frame * 0.07 + i * 2), exit = i % 2 === 1;
@@ -3463,6 +3467,73 @@ function updateIntro() {
   if (f >= INTRO_LEN) endIntro();
 }
 
+// ---------------------------------------------------------------- closing cut scene
+// After level 16, still at night: the raccoons come running in from the right, empty-handed, and scramble out of the window,
+// with Baby and Cleo chasing them (Cleo prancing) and CeCe rolling along behind. Then it's on to the level
+// picker with the congratulations ribbon. Tap anywhere to skip.
+const OUTRO_LEN = 9 * 60;
+let outro = null;                                   // { t } in frames while it plays
+function startOutro() {
+  // it's still night (right after level 16): the living room by moonlight and the night lights, the level itself cleared away
+  outro = { t: 0 }; state = 'outro'; codePad = null;
+  newEngine(); flying = []; current = null; particles = []; portals = []; cam.x = 0; cam.y = CAM_TOP;
+  PORTRAITS_NOW = PORTRAIT_LEVELS[0]; setBackdropTime(1, PORTRAITS_NOW.join());
+}
+function endOutro() { outro = null; state = 'levels'; finale = { t: 0 }; }
+// raccoons: [seconds, x, y, flags] like INTRO_COONS (o = outside, seen only through the window; h = hop)
+const OUTRO_COONS = [
+  [[0.0, 1450, IG], [1.6, 560, IG], [2.1, 560, ISILL, 'oh'], [2.5, 560, 580, 'o']],
+  [[0.25, 1550, IG], [1.9, 610, IG], [2.4, 610, ISILL, 'oh'], [2.8, 610, 580, 'o']],
+  [[0.5, 1650, IG], [2.2, 500, IG], [2.7, 500, ISILL, 'oh'], [3.1, 500, 580, 'o']],
+];
+// the cats chasing them: [type, radius, start time, start x, arrival time, end x]
+const OUTRO_CATS = [['baby', 30, 0.7, 1750, 2.7, 560], ['cleo', 34, 0.9, 1850, 3.0, 650], ['cece', 60, 1.1, 900 + 6 * Math.PI * 60, 3.6, 900]];   // they stop clear of the pink night light at x 760
+function drawOutroScene() {
+  const T = outro.t / 60;
+  OUTRO_COONS.forEach((path, i) => {
+    const c = introCoon(path, T);
+    if (!c) return;
+    ctx.save();
+    if (c.out) { ctx.beginPath(); ctx.rect(230, 110, 420, 400); ctx.clip(); }
+    const run = c.out || c.still ? 0 : Math.abs(Math.sin(T * 16 + i)) * 10;     // running flat out, not tiptoeing
+    drawCoon(c.x, c.y - run, 34, c.still ? 0 : -0.12 + Math.sin(T * 16 + i) * 0.08, { hp: 30, maxHp: 30, blink: i * 70, act: null });
+    // little sweat drops flying off as they flee
+    if (!c.out) { ctx.fillStyle = '#9fd3ff'; for (const k of [0, 1]) { const p = (T * 2 + k * 0.5 + i * 0.3) % 1; ctx.globalAlpha = 1 - p; ctx.beginPath(); ctx.ellipse(c.x + 30 + p * 26, c.y - 30 - p * 24 - run, 4, 6, 0.5, 0, 7); ctx.fill(); } ctx.globalAlpha = 1; }
+    ctx.restore();
+  });
+  OUTRO_CATS.forEach(([type, r, t0, x0, t1, x1], i) => {
+    if (T < t0) return;
+    const k = Math.min(1, (T - t0) / (t1 - t0)), e = 1 - Math.pow(1 - k, 2), x = x0 + (x1 - x0) * e, moving = k < 1;
+    let y = GROUND - r, ang = 0;
+    if (type === 'cece') ang = -(x0 - x) / r;                                      // she rolls (lands upright: exactly three turns)
+    else if (type === 'cleo' && moving) y -= Math.abs(Math.sin(T * 7)) * 46;     // elegant prancing leaps
+    else if (moving) y -= Math.abs(Math.sin(T * 15)) * 12;                        // Baby scampers
+    else y -= Math.abs(Math.sin(T * 6 + i)) * 10;                                 // bouncing with glee at the window
+    const mood = T >= 6 ? { mood: 'happy' } : { mood: 'fierce', k: 1 };
+    drawCat(x, y, r, ang, type, mood);
+  });
+}
+function drawOutroUI() {
+  const T = outro.t / 60;
+  if (T >= 3.4) {
+    const k = Math.min(1, (T - 3.4) / 0.25), pop = 1 + 0.18 * Math.sin(k * Math.PI);
+    ctx.save(); ctx.translate(W / 2, 170); ctx.scale(pop * k, pop * k);
+    ctx.fillStyle = 'rgba(24,14,48,0.88)'; rr(-520, -80, 1040, 160, 48); ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
+    text('Yah you better run!', 0, 4, 84, '#ffe14d', { stroke: '#120a26', strokeW: 12 });
+    ctx.restore();
+  }
+  ctx.globalAlpha = 0.75; text('Tap to skip', W - 40, H - 40, 26, '#ffffff', { stroke: '#3a2160', strokeW: 5, align: 'right', weight: 600 }); ctx.globalAlpha = 1;
+}
+function updateOutro() {
+  if (!outro) return;
+  const f = ++outro.t;
+  if (f === 6) sfx.cat(pick(CAT_SOUNDS.chatter.cleo), 0.7);
+  if (f === Math.round(2.1 * 60)) sfx.creak();                                    // out the window they go
+  if (f === Math.round(3.4 * 60)) { sfx.cat(pick(CAT_SOUNDS.chatter.cece), 0.7); sfx.cat(pick(CAT_SOUNDS.chatter.baby), 0.6, 0.12); }
+  if (f >= OUTRO_LEN) endOutro();
+}
+
 // ---------------------------------------------------------------- frame loop
 
 function resize() {
@@ -3490,12 +3561,13 @@ function render() {
   fsSlot = null;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#120d22'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (state === 'intro') {
+  if (state === 'intro' || state === 'outro') {
     ctx.setTransform(worldScale, 0, 0, worldScale, 0, -CAM_TOP * worldScale);
     drawBackdrop(0);
-    drawIntroScene();
+    if (state === 'intro') drawIntroScene();
+    else { nightWindows(); drawNightLights(); drawOutroScene(); drawNight(); }
     setUI();
-    centred(drawIntroUI);
+    centred(state === 'intro' ? drawIntroUI : drawOutroUI);
   } else if (state === 'menu' || state === 'levels') {
     // the room as it looks at the start of a level, behind the menu
     ctx.setTransform(worldScale, 0, 0, worldScale, 0, -CAM_TOP * worldScale);

@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 80;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 81;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -116,6 +116,11 @@ function mug(lv, x, base) { block(lv, 'mug', x, base - 15, 26, 30); }
 // later-level Easter eggs: a cucumber on the floor (a cat that touches it leaps in fright),
 // and a patch of sunshine where a cat that comes to rest curls up for a nap
 function cucumber(lv, x) { block(lv, 'cucumber', x, GROUND - 10, 70, 20); }
+// something dangling on a string (Easter egg): a spider from the attic ceiling, or a feather wand toy under a shelf.
+// A cat that flies through it catches it.
+function dangle(lv, kind, x, top, len) { (lv.dangles = lv.dangles || []).push({ kind, x, top, len }); }
+// a cat that comes to rest up on a high spot strikes a pose (Easter egg)
+function perchEgg(lv, x, w, maxY, title, sub) { lv.perch = { x, w, maxY, title, sub }; }
 // a toy mouse: a cat that bumps it squeaks and pounces (Easter egg)
 function toyMouse(lv, x, y = GROUND - 13) { block(lv, 'toymouse', x, y, 54, 26); }
 function sunbeam(lv, x, w) { lv.sunbeam = { x, w }; }
@@ -168,6 +173,7 @@ const LEVELS = [
     hut(lv, 1175, r1, 124, 90, 'wood', 'glass'); coon(lv, 1175, r1);
     const r3 = hut(lv, 1110, r2, 124, 90, 'glass', 'wood'); coon(lv, 1110, r2);
     loot(lv, 1110, r3, 'fish');
+    perchEgg(lv, 1110, 170, 520, 'Sphinx pose!', 'Ruler of the pyramid');   // a cat resting on top of the pyramid
   } },
   // CeCe's first turn up front: she can't fly this far, but she bowls into the tower's stone footing and a
   // well-timed shake brings the whole thing down. The rafter raccoon is out of her reach: that's for the flyers.
@@ -176,6 +182,7 @@ const LEVELS = [
     for (let i = 0; i < 3; i++) { const nt = hut(lv, 1430, t, 124, 120, i === 0 ? 'stone' : i === 1 ? 'glass' : 'wood', 'wood'); coon(lv, 1430, t, false, i > 0); t = nt; }
     coon(lv, 1430, t);
     const r = shelf(lv, 1080, 650, 120); coon(lv, 1060, r); loot(lv, 1118, r, 'yarn');   // up in the rafters
+    dangle(lv, 'spider', 850, 290, 210);                                   // a spider on a thread in the attic
     loot(lv, 1250, GROUND, 'fish');
   } },
   { name: 'The Big Boss Bandit', cats: ['cleo', 'baby', 'cece'], build(lv) {
@@ -218,6 +225,7 @@ const LEVELS = [
   { name: 'Balloon Getaway', cats: ['cece', 'cleo', 'baby'], build(lv) {
     floatie(lv, 1000, 570); floatie(lv, 1250, 505);
     const s = shelf(lv, 1420, 640, 220); block(lv, 'decoy', 1420, s - 70, 92, 140);   // the boss? not quite...
+    dangle(lv, 'feather', 1330, 658, 70);                                   // a feather wand toy hanging under the shelf
     coon(lv, 1420, GROUND, true);
     block(lv, 'stone', 1560, GROUND - 90, 30, 180);
     loot(lv, 1520, GROUND, 'fish');
@@ -613,6 +621,7 @@ function chatterBubble(who, x, y) {
   text(c.sym, 0, -4, 28, c.sym === '♥' ? '#e8578f' : '#3a2160');
   ctx.restore();
 }
+let menuChorus = -999;               // when the three-cat meow chorus Easter egg last played
 let menuHop = {};                   // home screen: when each cat was last tapped
 let bubbles = [];                   // zero-gravity zones in this level
 let portals = [];                   // magic cat flaps in this level
@@ -624,6 +633,7 @@ let boxCat = null;                  // which cat climbed into the box ("if I fit
 let laser = null, laserWait = 0, laserCaught = false;
 let cucumberScare = false, sun = null, napCat = null;
 let eggFlags = {}, bird = null, moonCat = 0, petHold = null, hairball = null, hairCount = 0;   // the cat Easter eggs
+let perch = null, dangles = [];
 let eggBanner = null;               // the big 'you found an Easter egg' badge
 const EGG_LEN = 140;
 
@@ -754,6 +764,8 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
   eggFlags = {}; hairCount = 0; hairball = null; petHold = null; moonCat = 0;
+  perch = lv.perch ? { ...lv.perch, x: lv.perch.x + FORT_X } : null;
+  dangles = (lv.dangles || []).map(d => ({ ...d, x: d.x + FORT_X, caught: false }));
   bird = LEVELS[i].bird ? { ox: 0, oy: 0, flee: 0, seed: Math.random() * 100 } : null;
   portals = lv.portals.map(q => ({ ...q, flap: 0 }));
   // the fridge level's tip sits up high, above the fort you're trying to memorise while the door is open
@@ -1065,7 +1077,11 @@ function updatePortals() {
       sparkle({ x: q.x, y: q.y }, 8);
       Body.setPosition(b, { x: out.x, y: out.y }); Body.setVelocity(b, v);
       g.portalOut = q.link; q.flap = out.flap = 24;
-      if (g.kind === 'cat') portalLight(out);
+      if (g.kind === 'cat') {
+        portalLight(out);
+        g.flaps = (g.flaps || 0) + 1;
+        if (g.flaps === 2 && !eggFlags.flap2) { eggFlags.flap2 = true; eggBonus('Flap happy!', 1500, { x: out.x, y: out.y }, 'In, out, in, out...'); }
+      }
       sparkle({ x: out.x, y: out.y }, 10);
       if (g.trail) g.trail.length = 0;
       sfx.tone('sine', 380, 1500, 0.22, 0.09); sfx.tone('triangle', 1500, 600, 0.18, 0.05, 0.12);
@@ -1152,7 +1168,34 @@ function eggTap(p) {
   }
   return false;
 }
+const dangleTip = d => { const a = Math.sin(frame * 0.03 + d.x) * 0.16; return { x: d.x + Math.sin(a) * d.len, y: d.top + Math.cos(a) * d.len }; };
 function updateEggs() {
+  for (const d of dangles) {
+    if (d.caught) continue;
+    const tip = dangleTip(d);
+    const c = flying.find(c => !c.game.done && Math.hypot(c.position.x - tip.x, c.position.y - tip.y) < c.game.r + 18);
+    if (!c) continue;
+    d.caught = true; poof(tip, 5, 0.5);
+    sfx.cat(pick(CAT_SOUNDS.chatter[c.game.type]), 0.6);
+    if (d.kind === 'spider') eggBonus('Bug hunter!', 800, tip, 'Snatched it!');
+    else eggBonus('Feather frenzy!', 800, tip, 'Must... catch... it!');
+  }
+  if (perch && !eggFlags.perch) for (const c of flying) {
+    const g = c.game;
+    if (g.done || g.rest < 20 || Math.abs(c.position.x - perch.x) > perch.w / 2 || c.position.y > perch.maxY) continue;
+    eggFlags.perch = true; eggBonus(perch.title, 1500, c.position, perch.sub); sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6);
+  }
+  for (const v of vacs) {
+    if (v.body.game.dead || eggFlags.roomba) continue;
+    const top = v.body.position.y - 15;
+    for (const c of flying) {
+      const g = c.game;
+      if (g.done) continue;
+      if (Math.abs(c.position.x - v.body.position.x) < 55 && Math.abs(c.position.y + g.r - top) < 12 && Math.abs(c.velocity.y) < 1.5) g.ride = (g.ride || 0) + 1;
+      else g.ride = 0;
+      if (g.ride === 25) { eggFlags.roomba = true; eggBonus('Roomba rider!', 1500, c.position, 'Cats love these'); sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6); }
+    }
+  }
   if (bird && bird.flee) { bird.flee++; bird.ox += 4.5; bird.oy -= 3.2 + Math.sin(bird.flee * 0.35); if (bird.flee > 150) bird = null; }
   if (moonCat > 0) moonCat--;
   if (petHold) {
@@ -2757,6 +2800,34 @@ function drawSunbeam() {
     ctx.globalAlpha = 1;
   }
 }
+function drawDangles() {
+  for (const d of dangles) {
+    if (d.caught) continue;
+    const tip = dangleTip(d);
+    ctx.strokeStyle = d.kind === 'spider' ? 'rgba(255,255,255,0.75)' : '#c9a36a'; ctx.lineWidth = d.kind === 'spider' ? 1.5 : 2.5;
+    ctx.beginPath(); ctx.moveTo(d.x, d.top); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    if (d.kind === 'spider') {
+      ctx.strokeStyle = '#26232b'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+      for (const sg of [-1, 1]) for (let k = 0; k < 4; k++) {
+        const a = (k - 1.5) * 0.45, wig = Math.sin(frame * 0.2 + k) * 2;
+        ctx.beginPath(); ctx.moveTo(tip.x, tip.y + 4); ctx.quadraticCurveTo(tip.x + sg * 12, tip.y - 6 + k * 5 + wig, tip.x + sg * 17, tip.y + 2 + k * 6 + a * 4); ctx.stroke();
+      }
+      ctx.lineCap = 'butt';
+      ctx.fillStyle = '#26232b'; ctx.beginPath(); ctx.ellipse(tip.x, tip.y + 6, 9, 10, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.arc(tip.x, tip.y - 3, 6, 0, 7); ctx.fill();
+      ctx.fillStyle = '#fff'; for (const sg of [-1, 1]) { ctx.beginPath(); ctx.arc(tip.x + sg * 2.5, tip.y - 4, 1.8, 0, 7); ctx.fill(); }
+    } else {
+      // a fluffy feather toy: a few soft plumes in bright colours
+      for (const [a, col] of [[-0.5, '#ff6fae'], [0, '#6fd3ff'], [0.5, '#ffd23f']]) {
+        ctx.save(); ctx.translate(tip.x, tip.y); ctx.rotate(a + Math.sin(frame * 0.07 + a) * 0.15);
+        ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(0, 18, 7, 20, 0, 0, 7); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, 2); ctx.lineTo(0, 34); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.fillStyle = '#c9a36a'; ctx.beginPath(); ctx.arc(tip.x, tip.y, 4, 0, 7); ctx.fill();
+    }
+  }
+}
 function drawBird() {
   if (!bird) return;
   const b = birdPos(), t = frame + bird.seed, fl = bird.flee > 0;
@@ -2821,6 +2892,7 @@ function drawBalloon(b) {
 
 function drawWorld() {
   drawBird();
+  drawDangles();
   if (isNight()) { nightWindows(); drawKitchen(); drawNightLights(); }
   // while it's about to snap, the whole slingshot shakes harder and harder
   const creak = snapStrain / SNAP_DELAY;
@@ -3237,6 +3309,11 @@ function drawMenu() {
   const hopOf = type => { const k = (frame - (menuHop[type] || -99)) / 24; return k >= 0 && k < 1 ? Math.sin(k * Math.PI) * 34 : 0; };
   const tapCat = type => () => {
     menuHop[type] = frame;
+    if (['baby', 'cece', 'cleo'].every(t => frame - (menuHop[t] ?? -999) < 75) && frame - menuChorus > 150) {
+      // all three tapped in quick succession: a meow chorus (Easter egg)
+      menuChorus = frame;
+      ['cleo', 'baby', 'cece'].forEach((t, i) => sfx.cat(pick(CAT_SOUNDS.chatter[t]), 0.6, 0.35 + i * 0.22));
+    }
     if (!sfx.cat(pick(CAT_SOUNDS.chatter[type]), 0.65)) sfx.meow(type === 'baby' ? 1.25 : type === 'cece' ? 0.75 : 1);
   };
   for (const [type, x, y, r] of [['cece', 800, 612, 132], ['baby', 548, 650, 84], ['cleo', 1052, 646, 92]]) {
@@ -3246,6 +3323,14 @@ function drawMenu() {
     ? { lookX: Math.max(-1, Math.min(1, (menuPointer.x - uiShift - x) / 350)), lookY: Math.max(-1, Math.min(1, (menuPointer.y - y) / 300)) } : {};
   const menuFace = type => hopOf(type) > 0 ? { mood: 'happy' } : lookAt(type === 'baby' ? 548 : type === 'cece' ? 800 : 1052, 660);
   drawCat(800, 648 + bob(1) - hopOf('cece'), 132, 0, 'cece', menuFace('cece'));
+  if (frame - menuChorus < 130) {
+    // the chorus: music notes rising over the cats, and a little banner
+    const k = (frame - menuChorus) / 130;
+    ctx.globalAlpha = Math.min(1, (1 - k) * 3);
+    for (let i = 0; i < 9; i++) { const nk = (k * 1.4 + i / 9) % 1; text(i % 2 ? '♪' : '♫', 470 + (i * 83) % 660, 520 - nk * 260, 40 + (i % 3) * 8, ['#ffe14d', '#ff8fc8', '#8fd8ff'][i % 3], { stroke: '#3a2160', strokeW: 6 }); }
+    text('Meow-sic!', 800, 380 - Math.sin(Math.min(1, k * 4) * Math.PI / 2) * 30, 64, '#ffe14d', { stroke: '#3a2160', strokeW: 10, font: "'Luckiest Guy', " + FONT, weight: 400 });
+    ctx.globalAlpha = 1;
+  }
   drawCat(548, 686 + bob(0) - hopOf('baby'), 84, -0.08, 'baby', menuFace('baby'));
   drawCat(1052, 682 + bob(2) - hopOf('cleo'), 92, 0.06, 'cleo', menuFace('cleo'));
   nameText('baby', 548, 808, 62);

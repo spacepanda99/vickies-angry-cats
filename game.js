@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 71;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 72;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -756,7 +756,8 @@ function loadLevel(i) {
   eggFlags = {}; hairCount = 0; hairball = null; petHold = null; moonCat = 0;
   bird = LEVELS[i].bird ? { ox: 0, oy: 0, flee: 0, seed: Math.random() * 100 } : null;
   portals = lv.portals.map(q => ({ ...q, flap: 0 }));
-  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: 590, text: LEVELS[i].intro, life: 200, tip: true });
+  // the fridge level's tip sits up high, above the fort you're trying to memorise while the door is open
+  if (LEVELS[i].intro) popups.push({ x: fortCenter, y: LEVELS[i].fridge ? 390 : 590, text: LEVELS[i].intro, life: 200, tip: true });
   if (portals.length) popups.push({ x: fortCenter, y: LEVELS[i].intro ? 500 : 590, text: 'Magic cat flaps: in one, out the other!', life: 200, tip: true });
   bubbles = lv.bubbles; boxCat = null; laser = null; laserCaught = false; laserWait = 500 + Math.random() * 500;
   if (bubbles.length) popups.push({ x: fortCenter, y: 590, text: 'Zero gravity inside the bubbles!', life: 200, tip: true });

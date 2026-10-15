@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 76;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 77;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -3246,7 +3246,7 @@ function drawMenu() {
   nameText('baby', 548, 808, 62);
   nameText('cece', 800, 836, 70);
   nameText('cleo', 1052, 808, 72);
-  button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => { if (introSeen()) state = 'levels'; else startIntro(); });
+  button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => startIntro());
   text('v' + GAME_VERSION, -uiShift + 30, 872, 48, '#ffffff', { align: 'left', stroke: 'rgba(0,0,0,0.55)', strokeW: 8, weight: 700 });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
@@ -3341,20 +3341,18 @@ function drawLevels() {
 }
 
 // ---------------------------------------------------------------- opening cut scene
-// The first time you press PLAY: while the cats nap on their cushion, three raccoons climb in through the
+// Every time you press PLAY: while the cats nap on their cushion, three raccoons climb in through the
 // window with empty loot sacks, tiptoe over and bag the cats' treats and toys, and sneak off to the right (toward
 // their fort in level 1). The cats
 // wake up to the news. Tap anywhere to skip. It's drawn in the living room, with the camera at the slingshot.
-const INTRO_LEN = 11 * 60, INTRO_KEY = 'vickiesAngryCats.introSeen';
+const INTRO_LEN = 11 * 60;
 let intro = null;                                   // { t } in frames while it plays
-const introSeen = () => { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch (e) { return false; } };
 function startIntro() {
   intro = { t: 0 }; state = 'intro';
   PORTRAITS_NOW = PORTRAIT_LEVELS[0]; setBackdropTime(0, PORTRAITS_NOW.join());
 }
 function endIntro() {
   intro = null; state = 'levels';
-  try { localStorage.setItem(INTRO_KEY, '1'); } catch (e) { /* private mode */ }
 }
 const IG = GROUND - 35;                              // a raccoon standing on the floor
 const ISILL = 481;                                   // ... crouched on the window sill

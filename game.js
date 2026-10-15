@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 89;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 90;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1151,6 +1151,18 @@ function squeakMouse(m) {
   [0, 1].forEach(k => sfx.tone('square', 1700 + k * 500, 2700, 0.07, 0.09, k * 0.09));
   eggBonus('Toy mouse!', 500, m.position, 'Squeak!');
 }
+// tap one of the family cats' portraits on the wall: lots of hearts float out of it
+function tapPortrait(p) {
+  const r = portraitRects().find(q => p.x >= q.x && p.x <= q.x + q.w && p.y >= q.y && p.y <= q.y + q.h);
+  if (!r) return false;
+  const cx = r.x + r.w / 2, cy = r.y + r.h * 0.42;
+  for (let i = 0; i < 30; i++) {
+    const a = rand(-Math.PI, 0), sp = rand(1.5, 5.5);
+    particles.push({ type: 'heart', x: cx + rand(-30, 30), y: cy + rand(-25, 25), vx: Math.cos(a) * sp * 0.8, vy: Math.sin(a) * sp - 1, s: rand(9, 18), life: rand(60, 95), max: 95 });
+  }
+  [988, 1319, 1568].forEach((f, i) => sfx.tone('sine', f, f, 0.18, 0.06, i * 0.07));
+  return true;
+}
 // taps on the window bird or the moon; true if it used the tap
 function eggTap(p) {
   if (bird && !bird.flee) {
@@ -1503,6 +1515,7 @@ canvas.addEventListener('pointerdown', e => {
   }
   if (laser && Math.hypot(p.x - laser.x, p.y - laser.y) < 55) { catchLaser(); return; }
   if (eggTap(p)) return;
+  if (tapPortrait(p)) return;
   if (phase !== 'flying') {
     const spots = queueSpots(), i = spots.findIndex(q => Math.hypot(p.x - q.x, p.y - q.y) < q.r + 10);
     if (i >= 0) { petCat(i, spots[i]); petHold = { who: i, t: 0 }; return; }

@@ -111,13 +111,18 @@ function buildFar(tod = 0) {
   // framed portraits of the family's own cats, hung on the clear wall between the windows (which ones depends on the level)
   const hz = parseInt(keyed(TOD.haze, tod).slice(1), 16);
   haze(L, `rgba(${hz >> 16},${(hz >> 8) & 255},${hz & 255},0.35)`);
-  const pn = PORTRAITS_NOW.slice(0, 2);   // a lone portrait is centred in the gap between the curtains (x 720-990); a pair sits side by side
-  pn.forEach((kind, i) => paintPortrait(g, 855 - (pn.length * 128 + (pn.length - 1) * 4) / 2 + i * 132, 375, 128, 160, kind));   // centred between the top of the screen and the sofa   // mid-wall, clear of the hint pill and the sofa
+  portraitRects().forEach(p => paintPortrait(g, p.x, p.y, p.w, p.h, p.kind));   // centred between the top of the screen and the sofa   // mid-wall, clear of the hint pill and the sofa
   return L;
 }
 
 // ---- portraits of the family's cats. They don't have to be accurate: a framed cartoon face with a name plate.
-let PORTRAITS_NOW = [];   // the kinds hung on the wall for the current level (set by game.js before the far wall is rebuilt)
+let PORTRAITS_NOW = [];
+// where the portraits hang (world coords): a lone one centred in the gap between the curtains (x 720-990), a pair
+// side by side, centred between the top of the screen and the sofa
+function portraitRects() {
+  const pn = PORTRAITS_NOW.slice(0, 2);
+  return pn.map((kind, i) => ({ kind, x: 855 - (pn.length * 128 + (pn.length - 1) * 4) / 2 + i * 132, y: 375, w: 128, h: 160 }));
+}   // the kinds hung on the wall for the current level (set by game.js before the far wall is rebuilt)
 const PORTRAIT_CATS = {
   pumpkin: { name: 'Pumpkin', bg: '#cfe3d2', fur: '#e8933f', mark: '#b9631f', light: '#f9dcae', eye: '#8fc96a', rx: 1.0, stripes: true },
   stubby:  { name: 'Stubby',  bg: '#e6d8ef', fur: '#f0a752', mark: '#cf8330', light: '#fce3bb', eye: '#d9a33a', rx: 1.1, stripes: true, flat: true, fluff: true },

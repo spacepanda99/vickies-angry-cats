@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 79;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 80;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -2553,8 +2553,9 @@ function drawFridge() {
   ctx.strokeStyle = '#9aa6b1'; ctx.lineWidth = 3; ctx.stroke();
   ctx.fillStyle = '#b9c3cc'; ctx.fillRect(xr + (k > 0.5 ? -12 : 14), F.top + 175, 6, 80);   // handle
   ctx.fillRect(F.x + 20, F.top + 40, 6, 60);                               // freezer handle
-  // the raccoon who opens it, standing just past the fridge, munching what he found
-  drawCoon(hx + 40 + 70 * k, GROUND - 35, 34, -0.1, { hp: 30, maxHp: 30, blink: 9, act: 'fish' });
+  // the raccoon who opens it, standing just past the fridge, munching what he found (only on the fridge level:
+  // he's scenery, not a target, so on level 16 he'd just look like one)
+  if (hasFridge()) drawCoon(hx + 40 + 70 * k, GROUND - 35, 34, -0.1, { hp: 30, maxHp: 30, blink: 9, act: 'fish' });
 }
 
 // plug-in night lights along the wall: each a little glowing shape, with its own hue and a gentle breathe

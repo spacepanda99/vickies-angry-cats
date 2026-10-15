@@ -1,0 +1,3 @@
+
+# raw Lyria API responses (base64 audio, already saved as mp3)
+tools/music/*.raw.json

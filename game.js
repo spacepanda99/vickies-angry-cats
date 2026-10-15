@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 72;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 73;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -2453,6 +2453,7 @@ function nightWindows() {
       ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(fx, fy, 10, 0, 7); ctx.fill();
     }
     ctx.globalAlpha = 1;
+    drawFairyWire(fairyBulbs());                                           // the string lights out in the garden
     ctx.strokeStyle = '#c9d3e6'; ctx.lineWidth = 18; ctx.strokeRect(x, y, w.ww, w.wh);
     ctx.lineWidth = 9; ctx.beginPath(); ctx.moveTo(x + w.ww / 2, y); ctx.lineTo(x + w.ww / 2, y + w.wh); ctx.moveTo(x, y + w.wh * 0.45); ctx.lineTo(x + w.ww, y + w.wh * 0.45); ctx.stroke();
     ctx.restore();
@@ -2568,16 +2569,18 @@ function drawNightLightFaces() {
     ctx.save(); ctx.translate(l.x, l.y - 16); ctx.scale(0.5, 0.5); nlShape(l, 0, 0); ctx.restore(); ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fill();
   }
 }
-// fairy lights strung in swags along the ceiling
+// colored string lights strung in swags across the garden outside: you only see them through the windows,
+// and they drift with the rest of the view outside (see nightWindows)
 function fairyBulbs() {
-  const out = [], x0 = 260, x1 = KITCHEN.x - 60, span = 300;
+  const out = [], x0 = 150, x1 = 1650, span = 300, sh = (1 - 0.96) * cam.x;
   for (let x = x0; x <= x1; x += 38) {
-    const f = ((x - x0) % span) / span, y = 318 + Math.sin(f * Math.PI) * 46;
+    const f = ((x - x0) % span) / span, y = 335 + Math.sin(f * Math.PI) * 38;   // across the middle of what you can see through the window
     const k = Math.round((x - x0) / 38);
-    out.push({ x, y, c: FAIRY[k % FAIRY.length], a: 0.55 + 0.45 * Math.sin(frame * 0.06 + k * 1.7) });
+    out.push({ x: x + sh, y, c: FAIRY[k % FAIRY.length], a: 0.55 + 0.45 * Math.sin(frame * 0.06 + k * 1.7) });
   }
   return out;
 }
+const outsideBulbs = () => fairyBulbs().filter(b => inWindow(b.x) && b.x < KITCHEN.x - 12);   // the kitchen wall hides the end of the second window
 function drawFairyWire(bulbs) {
   ctx.strokeStyle = 'rgba(40,40,50,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
   bulbs.forEach((b, i) => i ? ctx.lineTo(b.x, b.y - 4) : ctx.moveTo(b.x, b.y - 4)); ctx.stroke();
@@ -2625,7 +2628,7 @@ function nightLights() {
     L.push({ kind: 'round', x: ox + Math.cos(a) * 430, y: oy + Math.sin(a) * 430, r: 150, rgb: '255,236,170', cut: 0.75, glow: 0.16 });
   }
   // fairy lights, and flashes from explosions
-  for (const b of fairyBulbs()) L.push({ kind: 'round', x: b.x, y: b.y + 3, r: 46, rgb: hexRgb(b.c), cut: 0.35 * b.a, glow: 0.35 * b.a });
+  for (const b of outsideBulbs()) L.push({ kind: 'round', x: b.x, y: b.y + 3, r: 22, rgb: hexRgb(b.c), cut: 0.45 * b.a, glow: 0.3 * b.a });
   for (const p of particles) if (p.type === 'ring') L.push({ kind: 'round', x: p.x, y: p.y, r: p.s * 1.4, rgb: '255,210,140', cut: 0.9 * p.life / p.max, glow: 0.4 * p.life / p.max });
   return L;
 }
@@ -2669,7 +2672,7 @@ function drawNight() {
   if (phase === 'aim' && current) add(SLING.x + pull.x, SLING.y + pull.y, CATS[current].r, current);
   for (const c of flying) if (!c.game.done) add(c.position.x, c.position.y, c.game.r, c.game.type);
   for (const [x, y, r] of eyes) softLight(ctx, x, y, r * 0.22, '200,255,150', 0.55);
-  for (const b of fairyBulbs()) softLight(ctx, b.x, b.y + 3, 9, hexRgb(b.c), b.a);
+  for (const b of outsideBulbs()) softLight(ctx, b.x, b.y + 3, 9, hexRgb(b.c), b.a);
   // night-vision goggles glow green in the dark: that's how you spot a raccoon nobody has lit up
   for (const b of bodies()) {
     const g = b.game;
@@ -2792,7 +2795,7 @@ function drawBalloon(b) {
 
 function drawWorld() {
   drawBird();
-  if (isNight()) { nightWindows(); drawKitchen(); drawNightLights(); drawFairyWire(fairyBulbs()); }
+  if (isNight()) { nightWindows(); drawKitchen(); drawNightLights(); }
   // while it's about to snap, the whole slingshot shakes harder and harder
   const creak = snapStrain / SNAP_DELAY;
   const sj = creak > 0 ? { x: (Math.random() - 0.5) * (3 + 8 * creak), y: (Math.random() - 0.5) * (2 + 4 * creak) } : { x: 0, y: 0 };

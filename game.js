@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 91;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 92;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -525,6 +525,9 @@ const MUSIC = {
   lv14: { url: 'music-lv14.ogg', loopStart: 36.6798, loopEnd: 115.3441 },
   lv15: { url: 'music-lv15.ogg', loopStart: 20.1873, loopEnd: 107.4477 },        // cool late-night vibe
   lv16: { url: 'music-lv16.ogg', loopStart: 43.6267, loopEnd: 96.0029 },         // stealthy lamp-lit night heist
+  // the cut scenes (Lyria 3 Clip, trimmed to the scene with a fade): sneaky for the break-in, a fanfare for the finale
+  cutIntro: { url: 'music-cut-intro.ogg', loopStart: 0, loopEnd: 12.95 },
+  cutOutro: { url: 'music-cut-outro.ogg', loopStart: 0, loopEnd: 10.95 },
 };
 // Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.
 const levelTrack = () => MUSIC['lv' + (levelIdx + 1)] && levelIdx > 0 ? 'lv' + (levelIdx + 1) : 'game';
@@ -548,9 +551,12 @@ const music = {
   update() {
     if (!sfx.ac) return;
     this.ensure();
-    const want = state === 'menu' || state === 'levels' || state === 'intro' || state === 'outro' ? 'menu' : levelTrack();
+    const want = state === 'intro' ? 'cutIntro' : state === 'outro' ? 'cutOutro' : state === 'menu' || state === 'levels' ? 'menu' : levelTrack();
     this.load(want);
     if (this.buffers[want]) this.load(want === 'menu' ? levelTrack() : 'menu');
+    // have the cut scene music ready before it's needed: the break-in from the title screen, the finale during level 16
+    if (state === 'menu') this.load('cutIntro');
+    if (state === 'play' && levelIdx === LEVELS.length - 1) this.load('cutOutro');
     if ((this.current && this.current.name === want) || !this.buffers[want]) return;
     const t = sfx.ac.currentTime;
     if (this.current) { const old = this.current; old.g.gain.setTargetAtTime(0, t, 0.25); old.src.stop(t + 1.5); }
@@ -1440,7 +1446,8 @@ function finishWin() {
   // the last level goes straight back to the level picker, with a congratulations ribbon across the top
   if (levelIdx === LEVELS.length - 1) startOutro();
   else state = 'won';
-  sfx.win(); music.duck(3.2); sfx.cat(CAT_SOUNDS.win, 0.55, 2.6);
+  if (state !== 'outro') { sfx.win(); music.duck(3.2); }   // the finale has its own fanfare
+  sfx.cat(CAT_SOUNDS.win, 0.55, 2.6);
 }
 
 // ---------------------------------------------------------------- camera

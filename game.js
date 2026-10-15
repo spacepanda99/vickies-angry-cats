@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 96;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 97;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -575,11 +575,11 @@ const music = {
   pause() { this.paused = true; this.setVolume(0, 0.15); },
   resume() { if (!this.paused) return; this.paused = false; this.setVolume(this.on ? this.volume : 0, 0.3); },
   // dip the music while a win/lose jingle plays
-  duck(sec) {
+  duck(sec, level = 0.25) {
     if (!this.gain || !this.on || this.paused) return;
     const t = sfx.ac.currentTime;
     this.gain.gain.cancelScheduledValues(t);
-    this.gain.gain.setTargetAtTime(this.volume * 0.25, t, 0.05);
+    this.gain.gain.setTargetAtTime(this.volume * level, t, 0.05);
     this.gain.gain.setTargetAtTime(this.volume, t + sec, 0.5);
   },
 };
@@ -1191,8 +1191,8 @@ function tapCabinet(p) {
 function hitBong() {
   if (stoned) return;
   stoned = { base: phase === 'flying' ? score : null };   // mid-shot it counts for the shot in the air, else the next one
-  if (!sfx.playSample('bong', 0.8)) for (let i = 0; i < 14; i++) sfx.tone('sine', 140 + Math.random() * 90, 90, 0.09, 0.08, 0.3 + i * 0.09);   // bubbling
-  music.duck(5);
+  if (!sfx.playSample('bong', 1)) for (let i = 0; i < 14; i++) sfx.tone('sine', 140 + Math.random() * 90, 90, 0.09, 0.08, 0.3 + i * 0.09);   // bubbling
+  music.duck(5, 0.08);   // nearly silent, so the gurgling comes through clearly
   eggBanner = { title: 'Use your stoney Jedi skills!', sub: 'Points are doubled', pts: 0, t: 0 };
 }
 // the cat in the air (or the one about to go) has finished: double whatever the shot scored, then the smoke clears

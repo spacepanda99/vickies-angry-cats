@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 85;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 86;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1632,8 +1632,22 @@ function iconButton(kind, x, y, action) {
 
 // Full screen (Android Chrome): also tries to lock the phone sideways while full screen.
 const canFullscreen = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
-function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+// Launched from the home-screen icon, the phone already runs the game fullscreen (the manifest asks for it), but
+// document.fullscreenElement is empty then. So the button says "Exit" there, and Exit closes the app.
+const installedApp = () => {
+  try { return matchMedia('(display-mode: fullscreen)').matches || matchMedia('(display-mode: standalone)').matches || navigator.standalone === true; }
+  catch (e) { return false; }
+};
+function isFullscreen() { return !!(document.fullscreenElement || document.webkitFullscreenElement) || installedApp(); }
+let closeHint = 0;                                   // frames left to show "swipe up to close" if the app wouldn't close itself
+function closeApp() {
+  music.pause();
+  try { window.close(); } catch (e) { /* not allowed */ }
+  // an installed app usually closes at once; if it's still here a moment later, tell her how to close it
+  setTimeout(() => { closeHint = 420; }, 350);
+}
 function toggleFullscreen() {
+  if (installedApp() && !(document.fullscreenElement || document.webkitFullscreenElement)) { closeApp(); return; }
   if (isFullscreen()) { (document.exitFullscreen || document.webkitExitFullscreen).call(document); return; }
   const el = document.documentElement, req = el.requestFullscreen || el.webkitRequestFullscreen;
   Promise.resolve(req.call(el, { navigationUI: 'hide' }))
@@ -3674,6 +3688,17 @@ function render() {
     drawHUD();
     if (state === 'won') centred(drawWon);
     else if (state === 'lost') centred(drawLost);
+  }
+  if (closeHint > 0) {
+    closeHint--;
+    setUI();
+    ctx.globalAlpha = Math.min(1, closeHint / 30);
+    ctx.font = `700 40px ${FONT}`;
+    const msg = 'Swipe up from the bottom to close the game', w = ctx.measureText(msg).width + 90;
+    ctx.fillStyle = 'rgba(24,14,48,0.9)'; rr(UW / 2 - w / 2, H / 2 - 60, w, 120, 60); ctx.fill();
+    ctx.lineWidth = 5; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
+    text(msg, UW / 2, H / 2 + 2, 40, '#ffe14d', { stroke: '#120a26', strokeW: 8 });
+    ctx.globalAlpha = 1;
   }
   if (window.innerHeight > window.innerWidth * 1.1) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

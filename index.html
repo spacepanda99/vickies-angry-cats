@@ -12,7 +12,8 @@
 <title>Vickie's Angry Cats</title>
 <link rel="stylesheet" href="fonts/fonts.css">
 <style>
-  html, body { margin: 0; height: 100%; background: #120d22; overflow: hidden; }
+  /* mint, the same as the install splash screen (manifest background_color), so there is no dark flash between the splash and the first game frame */
+  html, body { margin: 0; height: 100%; background: #c4e4dd; overflow: hidden; }
   canvas { display: block; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
   #fsbtn { position: fixed; display: none; z-index: 2; border: 2px solid rgba(255,255,255,0.5); border-radius: 14px; color: #fff; font-family: Fredoka, 'Trebuchet MS', sans-serif; font-weight: 700; box-shadow: 0 4px 0 rgba(0,0,0,0.25); cursor: pointer; touch-action: manipulation; -webkit-tap-highlight-color: transparent; padding: 0; }
   #fsbtn:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(0,0,0,0.25); }
@@ -22,8 +23,8 @@
 <canvas id="game"></canvas>
 <button id="fsbtn" type="button"></button>
 <script src="matter.min.js"></script>
-<script src="backdrop.js?v=86"></script>
-<script src="game.js?v=86"></script>
+<script src="backdrop.js?v=87"></script>
+<script src="game.js?v=87"></script>
 <script>
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 </script>

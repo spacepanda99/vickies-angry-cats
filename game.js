@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 98;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 99;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -3821,7 +3821,15 @@ function placeFsButton() {
   });
   fsBtn.textContent = fsSlot.label;
 }
-fsBtn.addEventListener('click', () => { sfx.init(); const leaving = isFullscreen(); toggleFullscreen(); if (leaving) music.pause(); });   // Exit: stop the music too
+// Only a tap that starts on the button counts. The game's own buttons act as the finger touches down, so tapping Levels
+// in a level switches screens at once, and the lift would otherwise land on the Exit button that's now in the same spot.
+let fsPressedAt = -1e9;
+fsBtn.addEventListener('pointerdown', () => { fsPressedAt = performance.now(); });
+fsBtn.addEventListener('click', () => {
+  if (performance.now() - fsPressedAt > 1500) return;
+  fsPressedAt = -1e9;
+  sfx.init(); const leaving = isFullscreen(); toggleFullscreen(); if (leaving) music.pause();   // Exit: stop the music too
+});
 
 let last = performance.now(), acc = 0;
 function loop(now) {

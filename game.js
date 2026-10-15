@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 102;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 103;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1217,40 +1217,55 @@ function updateStash() {
   for (const s of smokePuffs) { s.x += s.vx; s.y += s.vy; s.vy += 0.004; s.r += 1.6; s.life--; }
   smokePuffs = smokePuffs.filter(s => s.life > 0);
 }
-// A Ukrainian flag outside the left window. Its pole is mounted on the wall just right of the window, so all you can see
-// of it is the bottom corner of the yellow stripe in the window's top-right corner, which flutters now and then. Grab it
-// and pull: the pole bends down and the whole flag comes into view. Let go and it springs back.
-const UKR = { bx: 720, by: 400, L: 380, a0: -120 * Math.PI / 180, s0: 0.5, fh: 100, full: -110 * Math.PI / 180 };
+// A Ukrainian flag outside the left window, on a pole that stands behind the cabinet and leans up behind the wall. The
+// flag's hoist runs down the top of the pole and it flies out to the right, so all you can see of it is the bottom corner
+// of the yellow stripe at the window's left edge, just above the cabinet (low enough not to pull down a phone's quick
+// menu); now and then the pole sways a little to catch your eye. Grab the corner and pull: the pole bends over to the
+// right and the whole flag comes into view. Let go and it springs back.
+const UKR = { bx: 265, by: 620, L: 340, a0: -120 * Math.PI / 180, fh: 90, fw: 135, full: 90 * Math.PI / 180 };
 function flagShape(phi, wave = 0) {
-  const N = 24, pole = [[UKR.bx, UKR.by]];
+  const N = 40, pole = [[UKR.bx, UKR.by]];
   let x = UKR.bx, y = UKR.by;
   for (let i = 1; i <= N; i++) { const a = UKR.a0 + phi * (i - 0.5) / N; x += Math.cos(a) * UKR.L / N; y += Math.sin(a) * UKR.L / N; pole.push([x, y]); }
-  const top = pole.slice(Math.round(UKR.s0 * N));
-  // the cloth hangs straight down from the pole; a flutter ripples along its bottom edge, most at the end nearest the wall
-  const bot = top.map(([px, py], i) => { const k = 1 - i / (top.length - 1); return [px + wave * 5 * k * Math.sin(frame * 0.5 + i), py + UKR.fh + wave * 9 * k * Math.sin(frame * 0.35 + i * 0.7)]; });
+  const ht = pole[N], hb = pole[Math.round(N * (1 - UKR.fh / UKR.L))];   // the hoist: the top stretch of the pole
+  const fa = UKR.a0 + phi * 0.65 + Math.PI / 2, fx = Math.cos(fa), fy = Math.sin(fa);   // square to the pole, lifting toward level as it bends
+  const hx = (hb[0] - ht[0]) / UKR.fh, hy = (hb[1] - ht[1]) / UKR.fh;
+  const top = [], bot = [], M = 16;
+  for (let i = 0; i <= M; i++) {
+    const u = i / M, r = (3 + 9 * wave) * u * Math.sin(u * 7.5 - frame * 0.12);   // a ripple, nothing at the pole end
+    top.push([ht[0] + fx * UKR.fw * u + hx * r, ht[1] + fy * UKR.fw * u + hy * r]);
+    bot.push([hb[0] + fx * UKR.fw * u + hx * r, hb[1] + fy * UKR.fw * u + hy * r]);
+  }
   return { pole, top, bot };
 }
-const flagCorner = phi => flagShape(phi).bot[0];   // the corner you can see (and grab)
+const flagCorner = phi => flagShape(phi).bot[0];   // the bottom of the hoist: the corner you can see (and grab)
+// the middle of whatever part of the flag shows through the window's lower pane, above the cabinet (what you'd put a finger on)
+function flagSpot(phi) {
+  const { top, bot } = flagShape(phi), w = WINDOWS[0];
+  let sx = 0, sy = 0, n = 0;
+  top.forEach((t, i) => { for (let v = 0; v <= 1; v += 0.125) { const x = t[0] + (bot[i][0] - t[0]) * v, y = t[1] + (bot[i][1] - t[1]) * v; if (x > w.wx + 9 && x < w.wx + w.ww - 9 && y > w.wy + w.wh * 0.45 + 5 && y < w.wy + w.wh - 9 && !(x < 280 && y > 348)) { sx += x; sy += y; n++; } } });
+  return n ? { x: sx / n, y: sy / n } : null;
+}
 function grabFlag(p) {
   if (isNight()) return false;
-  const w = WINDOWS[0], c = flagCorner(flag.phi);
-  if (p.x < w.wx || p.x > w.wx + w.ww || p.y < w.wy || p.y > w.wy + w.wh) return false;
-  if (Math.hypot(p.x - Math.min(c[0], w.wx + w.ww - 18), p.y - Math.max(c[1], w.wy + w.wh * 0.45 + 18)) > 60) return false;
-  flag.grab = true; flag.v = 0;
-  dragFlag(p);
+  const s = flagSpot(flag.phi);
+  if (!s || Math.hypot(p.x - s.x, p.y - s.y) > 55) return false;
+  const c = flagCorner(flag.phi);
+  flag.grab = { dx: c[0] - p.x, dy: c[1] - p.y }; flag.v = 0;   // where the finger is on the flag, so it doesn't jump
   return true;
 }
-// bend the pole as far as puts the corner nearest the finger
+// bend the pole as far as keeps the flag under the finger
 function dragFlag(p) {
+  const tx = p.x + flag.grab.dx, ty = p.y + flag.grab.dy;
   let best = flag.phi, bd = 1e9;
   for (let i = 0; i <= 40; i++) {
-    const phi = UKR.full * i / 40, c = flagCorner(phi), d = Math.hypot(c[0] - p.x, c[1] - p.y);
+    const phi = UKR.full * i / 40, c = flagCorner(phi), d = Math.hypot(c[0] - tx, c[1] - ty);
     if (d < bd) { bd = d; best = phi; }
   }
   flag.phi = best;
-  if (!flag.cheered && flag.phi < UKR.full * 0.8) {
+  if (!flag.cheered && flag.phi / UKR.full > 0.8) {
     flag.cheered = true;
-    const c = flagCorner(flag.phi), pos = { x: c[0] - 60, y: c[1] - 60 };
+    const pos = flagSpot(flag.phi) || p;
     if (!eggFlags.ukraine) { eggFlags.ukraine = true; eggBonus('Slava Ukraini!', 1000, pos, 'Glory to Ukraine!'); }
     else { eggBanner = { title: 'Slava Ukraini!', sub: 'Glory to Ukraine!', pts: 0, t: 0 }; sparkle(pos, 12); }
   }
@@ -1266,14 +1281,14 @@ function drawFlag() {
   if (state !== 'play' && state !== 'won' && state !== 'lost') return;
   if (isNight()) return;
   const w = WINDOWS[0], u = (frame % 420) / 70;
-  const wave = !flag.grab && flag.phi === 0 && u < 1 ? Math.sin(Math.PI * u) : 0;   // every 7 seconds a little flutter
-  const { pole, top, bot } = flagShape(flag.phi, wave);
+  const wave = !flag.grab && flag.phi === 0 && u < 1 ? Math.sin(Math.PI * u) : 0;   // every 7 seconds the pole sways and the flag flutters
+  const { pole, top, bot } = flagShape(flag.phi + wave * 0.045 * Math.sin(frame * 0.3), wave);
   ctx.save(); ctx.beginPath(); ctx.rect(w.wx, w.wy, w.ww, w.wh); ctx.clip();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  for (const [col, lw] of [['#7d8189', 9], ['#d9dce2', 5]]) { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); pole.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
   const mid = top.map(([x, y], i) => [(x + bot[i][0]) / 2, (y + bot[i][1]) / 2]);
   const band = (a, b, col) => { ctx.fillStyle = col; ctx.beginPath(); a.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); for (let i = b.length - 1; i >= 0; i--) ctx.lineTo(b[i][0], b[i][1]); ctx.closePath(); ctx.fill(); };
   band(top, mid, '#0057b7'); band(mid, bot, '#ffd500');
+  for (const [col, lw] of [['#7d8189', 9], ['#d9dce2', 5]]) { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); pole.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
   const tip = pole[pole.length - 1];
   ctx.fillStyle = '#e8b830'; ctx.beginPath(); ctx.arc(tip[0], tip[1], 7, 0, 7); ctx.fill();   // the gold ball on top
   ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';

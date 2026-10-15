@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 75;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 76;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -3342,7 +3342,8 @@ function drawLevels() {
 
 // ---------------------------------------------------------------- opening cut scene
 // The first time you press PLAY: while the cats nap on their cushion, three raccoons climb in through the
-// window with empty loot sacks, tiptoe over and bag the cats' treats and toys, and climb back out. The cats
+// window with empty loot sacks, tiptoe over and bag the cats' treats and toys, and sneak off to the right (toward
+// their fort in level 1). The cats
 // wake up to the news. Tap anywhere to skip. It's drawn in the living room, with the camera at the slingshot.
 const INTRO_LEN = 11 * 60, INTRO_KEY = 'vickiesAngryCats.introSeen';
 let intro = null;                                   // { t } in frames while it plays
@@ -3359,9 +3360,9 @@ const IG = GROUND - 35;                              // a raccoon standing on th
 const ISILL = 481;                                   // ... crouched on the window sill
 // each raccoon's path: [seconds, x, y, flags]. o = outside (only seen through the window), h = hop into this point
 const INTRO_COONS = [
-  [[1.0, 530, 580, 'o'], [1.5, 530, ISILL, 'o'], [2.1, 500, IG, 'h'], [2.6, 540, IG], [3.2, 600, IG], [4.9, 600, IG], [5.7, 530, IG], [6.2, 530, ISILL, 'oh'], [6.6, 530, 580, 'o']],
-  [[1.5, 600, 580, 'o'], [2.0, 600, ISILL, 'o'], [2.6, 630, IG, 'h'], [3.6, 660, IG], [4.1, 712, IG], [5.3, 712, IG], [6.1, 600, IG], [6.6, 600, ISILL, 'oh'], [7.0, 600, 580, 'o']],
-  [[2.0, 470, 580, 'o'], [2.5, 470, ISILL, 'o'], [3.1, 560, IG, 'h'], [3.9, 700, IG], [4.6, 770, IG], [5.6, 770, IG], [6.5, 470, IG], [7.0, 470, ISILL, 'oh'], [7.4, 470, 580, 'o']],
+  [[1.0, 530, 580, 'o'], [1.5, 530, ISILL, 'o'], [2.1, 500, IG, 'h'], [2.6, 540, IG], [3.2, 600, IG], [4.9, 600, IG], [6.7, 1500, IG]],
+  [[1.5, 600, 580, 'o'], [2.0, 600, ISILL, 'o'], [2.6, 630, IG, 'h'], [3.6, 660, IG], [4.1, 712, IG], [5.3, 712, IG], [6.9, 1500, IG]],
+  [[2.0, 470, 580, 'o'], [2.5, 470, ISILL, 'o'], [3.1, 560, IG, 'h'], [3.9, 700, IG], [4.6, 770, IG], [5.6, 770, IG], [7.1, 1500, IG]],
 ];
 // the loot on the floor, and which raccoon bags it when
 const INTRO_LOOT = [
@@ -3458,7 +3459,7 @@ function drawIntroUI() {
 function updateIntro() {
   if (!intro) return;
   const f = ++intro.t;
-  if (f === 60 || f === 372) sfx.creak();                                          // the window
+  if (f === 60) sfx.creak();                                                       // the window
   for (const l of INTRO_LOOT) if (f === Math.round(l.at * 60)) sfx.tone('triangle', 700, 1200, 0.07, 0.06);
   if (f === Math.round(7.2 * 60)) { sfx.cat(pick(CAT_SOUNDS.chatter.cece), 0.7); sfx.cat(pick(CAT_SOUNDS.chatter.baby), 0.6, 0.15); }
   if (f >= INTRO_LEN) endIntro();

@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 74;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 75;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -537,7 +537,7 @@ const music = {
   update() {
     if (!sfx.ac) return;
     this.ensure();
-    const want = state === 'menu' || state === 'levels' ? 'menu' : levelTrack();
+    const want = state === 'menu' || state === 'levels' || state === 'intro' ? 'menu' : levelTrack();
     this.load(want);
     if (this.buffers[want]) this.load(want === 'menu' ? levelTrack() : 'menu');
     if ((this.current && this.current.name === want) || !this.buffers[want]) return;
@@ -1225,6 +1225,7 @@ function step() {
   }
   popups = popups.filter(p => p.life > 0);
 
+  if (state === 'intro') { updateIntro(); return; }
   if (!engine || state === 'menu' || state === 'levels') return;
   // balloons: hover their platform near its height; once any balloon pops the rest can't hold it up
   for (const f of floats) {
@@ -1436,6 +1437,7 @@ canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
   sfx.init();
   const u = toUI(e);
+  if (state === 'intro') { if (intro && intro.t > 20) endIntro(); return; }
   if (state === 'menu') menuPointer = { ...u, f: frame };
   for (let i = uiButtons.length - 1; i >= 0; i--) {
     const b = uiButtons[i];
@@ -3244,7 +3246,7 @@ function drawMenu() {
   nameText('baby', 548, 808, 62);
   nameText('cece', 800, 836, 70);
   nameText('cleo', 1052, 808, 72);
-  button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => { state = 'levels'; });
+  button('PLAY', side * 0.5 + 1385, 760, 340, 120, '#4caf6a', () => { if (introSeen()) state = 'levels'; else startIntro(); });
   text('v' + GAME_VERSION, -uiShift + 30, 872, 48, '#ffffff', { align: 'left', stroke: 'rgba(0,0,0,0.55)', strokeW: 8, weight: 700 });
   if (!bigFullscreenButton(UW - uiShift - 200, 62, 330, 88)) exitFullscreenButton(UW - uiShift - 110, 62);
   iconButton('music', UW - uiShift - (!canFullscreen ? 60 : isFullscreen() ? 245 : 420), 60, () => music.toggle());
@@ -3338,6 +3340,130 @@ function drawLevels() {
   if (codePad) drawCodePad();
 }
 
+// ---------------------------------------------------------------- opening cut scene
+// The first time you press PLAY: while the cats nap on their cushion, three raccoons climb in through the
+// window with empty loot sacks, tiptoe over and bag the cats' treats and toys, and climb back out. The cats
+// wake up to the news. Tap anywhere to skip. It's drawn in the living room, with the camera at the slingshot.
+const INTRO_LEN = 11 * 60, INTRO_KEY = 'vickiesAngryCats.introSeen';
+let intro = null;                                   // { t } in frames while it plays
+const introSeen = () => { try { return localStorage.getItem(INTRO_KEY) === '1'; } catch (e) { return false; } };
+function startIntro() {
+  intro = { t: 0 }; state = 'intro';
+  PORTRAITS_NOW = PORTRAIT_LEVELS[0]; setBackdropTime(0, PORTRAITS_NOW.join());
+}
+function endIntro() {
+  intro = null; state = 'levels';
+  try { localStorage.setItem(INTRO_KEY, '1'); } catch (e) { /* private mode */ }
+}
+const IG = GROUND - 35;                              // a raccoon standing on the floor
+const ISILL = 481;                                   // ... crouched on the window sill
+// each raccoon's path: [seconds, x, y, flags]. o = outside (only seen through the window), h = hop into this point
+const INTRO_COONS = [
+  [[1.0, 530, 580, 'o'], [1.5, 530, ISILL, 'o'], [2.1, 500, IG, 'h'], [2.6, 540, IG], [3.2, 600, IG], [4.9, 600, IG], [5.7, 530, IG], [6.2, 530, ISILL, 'oh'], [6.6, 530, 580, 'o']],
+  [[1.5, 600, 580, 'o'], [2.0, 600, ISILL, 'o'], [2.6, 630, IG, 'h'], [3.6, 660, IG], [4.1, 712, IG], [5.3, 712, IG], [6.1, 600, IG], [6.6, 600, ISILL, 'oh'], [7.0, 600, 580, 'o']],
+  [[2.0, 470, 580, 'o'], [2.5, 470, ISILL, 'o'], [3.1, 560, IG, 'h'], [3.9, 700, IG], [4.6, 770, IG], [5.6, 770, IG], [6.5, 470, IG], [7.0, 470, ISILL, 'oh'], [7.4, 470, 580, 'o']],
+];
+// the loot on the floor, and which raccoon bags it when
+const INTRO_LOOT = [
+  { type: 'fish', x: 540, by: 0, at: 2.6 }, { type: 'yarn', x: 600, by: 0, at: 3.2 },
+  { type: 'mouse', x: 660, by: 1, at: 3.6 }, { type: 'fish', x: 712, by: 1, at: 4.1 },
+  { type: 'yarn', x: 770, by: 2, at: 4.6 },
+];
+const INTRO_CATS = [['baby', 850, 26], ['cece', 930, 38], ['cleo', 1010, 28]];
+const ism = k => k * k * (3 - 2 * k);
+function introCoon(path, T) {
+  if (T < path[0][0] || T > path[path.length - 1][0]) return null;
+  let i = 0; while (i < path.length - 2 && T > path[i + 1][0]) i++;
+  const a = path[i], b = path[i + 1], k = ism(Math.max(0, Math.min(1, (T - a[0]) / (b[0] - a[0]))));
+  let x = a[1] + (b[1] - a[1]) * k, y = a[2] + (b[2] - a[2]) * k;
+  const fb = b[3] || '', fa = a[3] || '';
+  if (fb.includes('h')) y -= Math.sin(k * Math.PI) * 80;                          // a hop over the sill
+  const walking = !fa.includes('o') && !fb.includes('o') && a[1] !== b[1];
+  if (walking) y -= Math.abs(Math.sin(T * 13)) * 7;                                // tiptoeing
+  return { x, y, out: fa.includes('o') && fb.includes('o'), dir: b[1] >= a[1] ? 1 : -1, still: a[1] === b[1] && a[2] === b[2] };
+}
+function introSack(c, n) {
+  // an empty loot sack slung over the shoulder that fills up as it goes
+  const sx = c.x - c.dir * 34, sy = c.y - 18, r = n ? 13 + n * 7 : 0;
+  ctx.fillStyle = '#9a7246'; ctx.strokeStyle = '#5e4326'; ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (!n) ctx.ellipse(sx, sy + 6, 17, 9, -0.3 * c.dir, 0, 7);                      // flat and empty
+  else ctx.ellipse(sx, sy + 4, r, r * 0.92, 0, 0, 7);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#7b5a35'; ctx.beginPath(); ctx.ellipse(sx + c.dir * (n ? r * 0.55 : 12), sy - (n ? r * 0.75 : 0), 6, 4, 0.6, 0, 7); ctx.fill();   // the tied neck
+  if (n) { ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sx - r * 0.25, sy, r * 0.55, 3.6, 4.6); ctx.stroke(); }
+  return { x: sx, y: sy };
+}
+function drawIntroScene() {
+  const T = intro.t / 60;
+  // the cats' cushion, and the cats napping on it (they wake up when they hear the news)
+  ctx.fillStyle = '#b48ad6'; ctx.beginPath(); ctx.ellipse(930, GROUND - 12, 140, 22, 0, 0, 7); ctx.fill();
+  ctx.fillStyle = '#9a6fc0'; ctx.beginPath(); ctx.ellipse(930, GROUND - 6, 140, 12, 0, 0, Math.PI); ctx.fill();
+  const awake = T >= 7.2, fierce = T >= 8.4;
+  INTRO_CATS.forEach(([type, x, r], i) => {
+    const hop = awake && !fierce ? Math.sin(Math.min(1, (T - 7.2 - i * 0.08) / 0.35) * Math.PI) * 34 : 0;
+    const y = GROUND - 20 - r + (awake ? 0 : Math.sin(frame * 0.05 + i) * 1.5) - Math.max(0, hop);
+    sleepyEyes = !awake;
+    drawCat(x, y, r, 0, type, awake ? (fierce ? { mood: 'fierce', k: 0.9 } : { mood: 'scared' }) : { calm: true });
+    sleepyEyes = false;
+    if (!awake) for (let k2 = 0; k2 < 2; k2++) {
+      const k = (frame * 0.012 + k2 / 2 + i * 0.3) % 1;
+      ctx.globalAlpha = Math.sin(k * Math.PI);
+      text('z', x + r * 0.8 + k * 30, y - r - k * 50, 14 + k * 14, '#ffffff', { stroke: '#3a2160', strokeW: 4 });
+      ctx.globalAlpha = 1;
+    }
+  });
+  // where every raccoon (and its sack) is now
+  const coons = INTRO_COONS.map(p => introCoon(p, T));
+  const counts = [0, 0, 0];
+  for (const l of INTRO_LOOT) if (T >= l.at + 0.35) counts[l.by]++;
+  const sacks = coons.map((c, i) => c ? { x: c.x - c.dir * 34, y: c.y - 18 } : null);
+  // the treats and toys: on the floor, then flying into a sack
+  for (const l of INTRO_LOOT) {
+    let x = l.x, y = GROUND - 14, sc = 1;
+    if (T >= l.at + 0.35) continue;
+    if (T >= l.at && sacks[l.by]) {
+      const k = ism((T - l.at) / 0.35), sk = sacks[l.by];
+      x = l.x + (sk.x - l.x) * k; y = (GROUND - 14) + (sk.y - (GROUND - 14)) * k - Math.sin(k * Math.PI) * 60; sc = 1 - 0.6 * k;
+    }
+    ctx.save(); ctx.translate(x, y); ctx.scale(sc, sc); ctx.translate(-x, -y);
+    if (l.type === 'mouse') drawBlock({ game: { mat: 'toymouse', w: 54, h: 26 }, position: { x, y: y + 1 }, angle: 0 });
+    else drawLoot({ position: { x, y }, angle: 0, game: { type: l.type } });
+    ctx.restore();
+  }
+  // the raccoons: outside they're only visible through the window pane
+  coons.forEach((c, i) => {
+    if (!c) return;
+    ctx.save();
+    if (c.out) { ctx.beginPath(); ctx.rect(230, 110, 420, 400); ctx.clip(); }
+    introSack(c, counts[i]);
+    drawCoon(c.x, c.y, 34, c.still ? 0 : Math.sin(T * 13) * 0.08, { hp: 30, maxHp: 30, blink: i * 70, act: null });
+    ctx.restore();
+  });
+}
+function drawIntroUI() {
+  const T = intro.t / 60;
+  if (T >= 6.8) {
+    const k = Math.min(1, (T - 6.8) / 0.25), pop = 1 + 0.15 * Math.sin(k * Math.PI);
+    ctx.save(); ctx.translate(W / 2, 170); ctx.scale(pop * k, pop * k);
+    ctx.fillStyle = 'rgba(24,14,48,0.88)'; rr(-640, -110, 1280, 220, 48); ctx.fill();
+    ctx.lineWidth = 6; ctx.strokeStyle = '#ffd23f'; ctx.stroke();
+    text('Oh no!', 0, -52, 72, '#ffe14d', { stroke: '#120a26', strokeW: 10 });
+    text('Raccoons have broken in and stolen', 0, 20, 44, '#ffffff', { stroke: '#120a26', strokeW: 8, weight: 700 });
+    text("the fur babies' treats and toys.", 0, 72, 44, '#ffffff', { stroke: '#120a26', strokeW: 8, weight: 700 });
+    ctx.restore();
+  }
+  ctx.globalAlpha = 0.75; text('Tap to skip', W - 40, H - 40, 26, '#ffffff', { stroke: '#3a2160', strokeW: 5, align: 'right', weight: 600 }); ctx.globalAlpha = 1;
+}
+function updateIntro() {
+  if (!intro) return;
+  const f = ++intro.t;
+  if (f === 60 || f === 372) sfx.creak();                                          // the window
+  for (const l of INTRO_LOOT) if (f === Math.round(l.at * 60)) sfx.tone('triangle', 700, 1200, 0.07, 0.06);
+  if (f === Math.round(7.2 * 60)) { sfx.cat(pick(CAT_SOUNDS.chatter.cece), 0.7); sfx.cat(pick(CAT_SOUNDS.chatter.baby), 0.6, 0.15); }
+  if (f >= INTRO_LEN) endIntro();
+}
+
 // ---------------------------------------------------------------- frame loop
 
 function resize() {
@@ -3365,7 +3491,13 @@ function render() {
   fsSlot = null;
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#120d22'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-  if (state === 'menu' || state === 'levels') {
+  if (state === 'intro') {
+    ctx.setTransform(worldScale, 0, 0, worldScale, 0, -CAM_TOP * worldScale);
+    drawBackdrop(0);
+    drawIntroScene();
+    setUI();
+    centred(drawIntroUI);
+  } else if (state === 'menu' || state === 'levels') {
     // the room as it looks at the start of a level, behind the menu
     ctx.setTransform(worldScale, 0, 0, worldScale, 0, -CAM_TOP * worldScale);
     drawBackdrop(0);

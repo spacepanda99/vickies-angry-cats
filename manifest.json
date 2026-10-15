@@ -1,6 +1,6 @@
 {
   "name": "Vickie's Angry Cats",
-  "short_name": "Angry Cats",
+  "short_name": "Vickie's Angry Cats",
   "start_url": "./index.html",
   "scope": "./",
   "display": "fullscreen",

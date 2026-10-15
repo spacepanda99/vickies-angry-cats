@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 99;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 100;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1154,7 +1154,7 @@ function catchLaser() {
   laser = null;
 }
 // ---- cat Easter eggs: a bird at the window, a hairball, a purr, a toy mouse, a cat in the moon
-const BIRD = { x: 520, y: 500 };   // perched on the first window's sill (that layer scrolls slower than the room)
+const BIRD = { x: 540, y: 482 };   // perched outside the first window, on the ledge just past the glass
 const birdPos = () => ({ x: cam.x * (1 - FAR_P) + BIRD.x + bird.ox, y: BIRD.y + bird.oy });
 const moonPos = () => ({ x: WINDOWS[0].wx + 300 + 0.1 * cam.x, y: WINDOWS[0].wy + 265 });   // the moon drifts a hair against the window frame
 const inWindow = x => WINDOWS.some(w => x > w.wx + 10 && x < w.wx + w.ww - 10);
@@ -1283,7 +1283,7 @@ function updateEggs() {
       if (g.ride === 25) { eggFlags.roomba = true; eggBonus('Roomba rider!', 1500, c.position, 'Cats love these'); sfx.cat(pick(CAT_SOUNDS.chatter[g.type]), 0.6); }
     }
   }
-  if (bird && bird.flee) { bird.flee++; bird.ox += 4.5; bird.oy -= 3.2 + Math.sin(bird.flee * 0.35); if (bird.flee > 150) bird = null; }
+  if (bird && bird.flee) { bird.flee++; bird.ox += 1.6; bird.oy -= 4.2 + Math.sin(bird.flee * 0.35); if (bird.flee > 150) bird = null; }   // up and away into the sky
   if (moonCat > 0) moonCat--;
   if (petHold) {
     // hold a waiting cat: she purrs
@@ -2935,10 +2935,12 @@ function drawDangles() {
     }
   }
 }
+// drawn with the view outside (before the wall), so the window frame and bars are in front of it
 function drawBird() {
-  if (!bird) return;
-  const b = birdPos(), t = frame + bird.seed, fl = bird.flee > 0;
-  ctx.save(); ctx.translate(b.x, b.y); if (fl) ctx.rotate(-0.3);
+  if (!bird || (state !== 'play' && state !== 'won' && state !== 'lost')) return;
+  const b = birdPos(), t = frame + bird.seed, fl = bird.flee > 0, w = WINDOWS[0];
+  ctx.save(); ctx.beginPath(); ctx.rect(w.wx, w.wy, w.ww, w.wh); ctx.clip();
+  ctx.translate(b.x, b.y); if (fl) { ctx.rotate(-0.9); ctx.scale(Math.max(0.35, 1 - bird.flee / 110), Math.max(0.35, 1 - bird.flee / 110)); }   // shrinking as it flies off
   if (!fl) { ctx.strokeStyle = '#b57a3a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-4, 14); ctx.lineTo(-4, 24); ctx.moveTo(6, 14); ctx.lineTo(6, 24); ctx.stroke(); }
   ctx.fillStyle = '#3f6fb5'; ctx.beginPath(); ctx.moveTo(-16, 2); ctx.lineTo(-42, 12); ctx.lineTo(-40, -4); ctx.closePath(); ctx.fill();   // tail
   ctx.fillStyle = '#6fa8e8'; ctx.beginPath(); ctx.ellipse(0, 0, 23, 17, 0, 0, 7); ctx.fill();
@@ -2998,7 +3000,6 @@ function drawBalloon(b) {
 }
 
 function drawWorld() {
-  drawBird();
   drawDangles();
   if (isNight()) { nightWindows(); drawKitchen(); drawNightLights(); }
   // while it's about to snap, the whole slingshot shakes harder and harder

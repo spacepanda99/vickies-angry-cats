@@ -420,6 +420,7 @@ function drawOutsideDay(camX) {
 function drawBackdrop(camX) {
   const h = BACKDROP.bottom - BACKDROP.top;
   drawOutsideDay(camX);   // behind the wall: it shows through the window holes
+  drawBird();             // the bird at the window is out there too
   for (const [L, p] of [[BACKDROP.far, FAR_P], [BACKDROP.mid, MID_P]]) {
     ctx.drawImage(L.c, camX * (1 - p), BACKDROP.top, L.w, h);
   }

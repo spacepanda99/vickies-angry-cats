@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 94;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 95;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -527,7 +527,7 @@ const MUSIC = {
   lv16: { url: 'music-lv16.ogg', loopStart: 43.6267, loopEnd: 96.0029 },         // stealthy lamp-lit night heist
   // the cut scenes (Lyria 3 Clip, trimmed to the scene with a fade): sneaky for the break-in, a fanfare for the finale
   cutIntro: { url: 'music-cut-intro-dark2.ogg', loopStart: 0, loopEnd: 12.95 },    // dark and sinister; starts 3.85s into the clip, where the strings come in
-  cutOutro: { url: 'music-cut-outro.ogg', loopStart: 0, loopEnd: 10.95 },
+  cutOutro: { url: 'music-cut-outro-triumph.ogg', loopStart: 0, loopEnd: 10.95 },   // proud, soaring and triumphant in the same sound world as the heist music
 };
 // Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.
 const levelTrack = () => MUSIC['lv' + (levelIdx + 1)] && levelIdx > 0 ? 'lv' + (levelIdx + 1) : 'game';

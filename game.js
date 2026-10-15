@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 70;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 71;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -2128,9 +2128,15 @@ function drawBlock(b) {
       ctx.beginPath(); part.vertices.forEach((v, i) => i ? ctx.lineTo(v.x, v.y) : ctx.moveTo(v.x, v.y)); ctx.closePath();
       ctx.fillStyle = m.fill; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = m.edge; ctx.stroke();
     }
-    const L = b.parts[2].position, R = b.parts[3].position, H = Vector.add(b.position, Vector.rotate(g.handle, b.angle));
+    // the handle is drawn in the basket's own (tilted) frame, with its top exactly where the rope ties on,
+    // so the rope stays attached however far the basket swings
+    const toLocal = p => Vector.rotate(Vector.sub(p, b.position), -b.angle);
+    const L = toLocal(b.parts[2].position), R = toLocal(b.parts[3].position), H = g.handle;
+    const ly = (L.y + R.y) / 2 - 22;
+    ctx.save(); ctx.translate(b.position.x, b.position.y); ctx.rotate(b.angle);
     ctx.strokeStyle = m.edge; ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.moveTo(L.x, L.y - 22); ctx.quadraticCurveTo(H.x, H.y - 30, R.x, R.y - 22); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(L.x, L.y - 22); ctx.quadraticCurveTo(2 * H.x - (L.x + R.x) / 2, 2 * H.y - ly, R.x, R.y - 22); ctx.stroke();
+    ctx.restore();
     return;
   }
   if (g.poly) {

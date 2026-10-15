@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 83;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 84;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -559,10 +559,14 @@ const music = {
     this.current = { name: want, src, g };
   },
   setVolume(v, tc) { if (this.gain) { const t = sfx.ac.currentTime; this.gain.gain.cancelScheduledValues(t); this.gain.gain.setTargetAtTime(v, t, tc); } },
-  toggle() { this.on = !this.on; this.setVolume(this.on ? this.volume : 0, 0.1); saveAudio(); },
+  toggle() { this.on = !this.on; this.paused = false; this.setVolume(this.on ? this.volume : 0, 0.1); saveAudio(); },
+  // the Exit button silences the music without changing her saved on/off choice; it comes back on the next touch
+  paused: false,
+  pause() { this.paused = true; this.setVolume(0, 0.15); },
+  resume() { if (!this.paused) return; this.paused = false; this.setVolume(this.on ? this.volume : 0, 0.3); },
   // dip the music while a win/lose jingle plays
   duck(sec) {
-    if (!this.gain || !this.on) return;
+    if (!this.gain || !this.on || this.paused) return;
     const t = sfx.ac.currentTime;
     this.gain.gain.cancelScheduledValues(t);
     this.gain.gain.setTargetAtTime(this.volume * 0.25, t, 0.05);
@@ -1479,7 +1483,7 @@ const inButton = (u, b) => Math.abs(u.x - b.x) <= b.w / 2 && Math.abs(u.y - b.y)
 let liftButton = null;
 canvas.addEventListener('pointerdown', e => {
   e.preventDefault();
-  sfx.init();
+  sfx.init(); music.resume();
   const u = toUI(e);
   if (state === 'intro') { if (intro && intro.t > 20) endIntro(); return; }
   if (state === 'outro') { if (outro && outro.t > 20) endOutro(); return; }
@@ -3693,7 +3697,7 @@ function placeFsButton() {
   });
   fsBtn.textContent = fsSlot.label;
 }
-fsBtn.addEventListener('click', () => { sfx.init(); toggleFullscreen(); });
+fsBtn.addEventListener('click', () => { sfx.init(); const leaving = isFullscreen(); toggleFullscreen(); if (leaving) music.pause(); });   // Exit: stop the music too
 
 let last = performance.now(), acc = 0;
 function loop(now) {

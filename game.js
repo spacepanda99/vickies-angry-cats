@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 92;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 93;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -526,7 +526,7 @@ const MUSIC = {
   lv15: { url: 'music-lv15.ogg', loopStart: 20.1873, loopEnd: 107.4477 },        // cool late-night vibe
   lv16: { url: 'music-lv16.ogg', loopStart: 43.6267, loopEnd: 96.0029 },         // stealthy lamp-lit night heist
   // the cut scenes (Lyria 3 Clip, trimmed to the scene with a fade): sneaky for the break-in, a fanfare for the finale
-  cutIntro: { url: 'music-cut-intro.ogg', loopStart: 0, loopEnd: 12.95 },
+  cutIntro: { url: 'music-cut-intro-dark.ogg', loopStart: 0, loopEnd: 12.95 },     // dark and sinister: low strings, a creepy minor-key piano
   cutOutro: { url: 'music-cut-outro.ogg', loopStart: 0, loopEnd: 10.95 },
 };
 // Level 1 keeps the original gameplay track; every other level has its own (music-lvN.ogg), same style and instruments.

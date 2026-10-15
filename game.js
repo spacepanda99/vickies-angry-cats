@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 101;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 102;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -651,7 +651,8 @@ let perch = null, dangles = [];
 let eggBanner = null;               // the big 'you found an Easter egg' badge
 const EGG_LEN = 140;
 let cabinet = { k: 0, open: false };   // the cabinet's secret top doors (k: 0 shut .. 1 open)
-let stoned = null, smoke = 0, smokePuffs = [], bongShake = 0;   // after a bong hit: { base: score at launch } doubles the next shot; smoke 0..1 fills the room
+let stoned = null, smoke = 0, smokePuffs = [], bongShake = 0;
+let flag = { phi: 0, v: 0, grab: null, cheered: false };   // the Ukrainian flag outside the left window (phi: how far its pole is bent)   // after a bong hit: { base: score at launch } doubles the next shot; smoke 0..1 fills the room
 
 let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
@@ -780,6 +781,7 @@ function loadLevel(i) {
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
   cabinet = { k: 0, open: false }; stoned = null; smoke = 0; smokePuffs = []; bongShake = 0;
+  flag = { phi: 0, v: 0, grab: null, cheered: false };
   eggFlags = {}; hairCount = 0; hairball = null; petHold = null; moonCat = 0;
   perch = lv.perch ? { ...lv.perch, x: lv.perch.x + FORT_X } : null;
   dangles = (lv.dangles || []).map(d => ({ ...d, x: d.x + FORT_X, caught: false }));
@@ -1215,6 +1217,68 @@ function updateStash() {
   for (const s of smokePuffs) { s.x += s.vx; s.y += s.vy; s.vy += 0.004; s.r += 1.6; s.life--; }
   smokePuffs = smokePuffs.filter(s => s.life > 0);
 }
+// A Ukrainian flag outside the left window. Its pole is mounted on the wall just right of the window, so all you can see
+// of it is the bottom corner of the yellow stripe in the window's top-right corner, which flutters now and then. Grab it
+// and pull: the pole bends down and the whole flag comes into view. Let go and it springs back.
+const UKR = { bx: 720, by: 400, L: 380, a0: -120 * Math.PI / 180, s0: 0.5, fh: 100, full: -110 * Math.PI / 180 };
+function flagShape(phi, wave = 0) {
+  const N = 24, pole = [[UKR.bx, UKR.by]];
+  let x = UKR.bx, y = UKR.by;
+  for (let i = 1; i <= N; i++) { const a = UKR.a0 + phi * (i - 0.5) / N; x += Math.cos(a) * UKR.L / N; y += Math.sin(a) * UKR.L / N; pole.push([x, y]); }
+  const top = pole.slice(Math.round(UKR.s0 * N));
+  // the cloth hangs straight down from the pole; a flutter ripples along its bottom edge, most at the end nearest the wall
+  const bot = top.map(([px, py], i) => { const k = 1 - i / (top.length - 1); return [px + wave * 5 * k * Math.sin(frame * 0.5 + i), py + UKR.fh + wave * 9 * k * Math.sin(frame * 0.35 + i * 0.7)]; });
+  return { pole, top, bot };
+}
+const flagCorner = phi => flagShape(phi).bot[0];   // the corner you can see (and grab)
+function grabFlag(p) {
+  if (isNight()) return false;
+  const w = WINDOWS[0], c = flagCorner(flag.phi);
+  if (p.x < w.wx || p.x > w.wx + w.ww || p.y < w.wy || p.y > w.wy + w.wh) return false;
+  if (Math.hypot(p.x - Math.min(c[0], w.wx + w.ww - 18), p.y - Math.max(c[1], w.wy + w.wh * 0.45 + 18)) > 60) return false;
+  flag.grab = true; flag.v = 0;
+  dragFlag(p);
+  return true;
+}
+// bend the pole as far as puts the corner nearest the finger
+function dragFlag(p) {
+  let best = flag.phi, bd = 1e9;
+  for (let i = 0; i <= 40; i++) {
+    const phi = UKR.full * i / 40, c = flagCorner(phi), d = Math.hypot(c[0] - p.x, c[1] - p.y);
+    if (d < bd) { bd = d; best = phi; }
+  }
+  flag.phi = best;
+  if (!flag.cheered && flag.phi < UKR.full * 0.8) {
+    flag.cheered = true;
+    const c = flagCorner(flag.phi), pos = { x: c[0] - 60, y: c[1] - 60 };
+    if (!eggFlags.ukraine) { eggFlags.ukraine = true; eggBonus('Slava Ukraini!', 1000, pos, 'Glory to Ukraine!'); }
+    else { eggBanner = { title: 'Slava Ukraini!', sub: 'Glory to Ukraine!', pts: 0, t: 0 }; sparkle(pos, 12); }
+  }
+}
+function updateFlag() {
+  if (flag.grab) return;
+  // a springy pole: it whips back past straight and settles
+  flag.v += -0.03 * flag.phi - 0.09 * flag.v; flag.phi += flag.v;
+  if (Math.abs(flag.phi) < 0.002 && Math.abs(flag.v) < 0.002) { flag.phi = 0; flag.v = 0; flag.cheered = false; }
+}
+// drawn with the view outside (before the wall), clipped to the window
+function drawFlag() {
+  if (state !== 'play' && state !== 'won' && state !== 'lost') return;
+  if (isNight()) return;
+  const w = WINDOWS[0], u = (frame % 420) / 70;
+  const wave = !flag.grab && flag.phi === 0 && u < 1 ? Math.sin(Math.PI * u) : 0;   // every 7 seconds a little flutter
+  const { pole, top, bot } = flagShape(flag.phi, wave);
+  ctx.save(); ctx.beginPath(); ctx.rect(w.wx, w.wy, w.ww, w.wh); ctx.clip();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [col, lw] of [['#7d8189', 9], ['#d9dce2', 5]]) { ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.beginPath(); pole.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke(); }
+  const mid = top.map(([x, y], i) => [(x + bot[i][0]) / 2, (y + bot[i][1]) / 2]);
+  const band = (a, b, col) => { ctx.fillStyle = col; ctx.beginPath(); a.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); for (let i = b.length - 1; i >= 0; i--) ctx.lineTo(b[i][0], b[i][1]); ctx.closePath(); ctx.fill(); };
+  band(top, mid, '#0057b7'); band(mid, bot, '#ffd500');
+  const tip = pole[pole.length - 1];
+  ctx.fillStyle = '#e8b830'; ctx.beginPath(); ctx.arc(tip[0], tip[1], 7, 0, 7); ctx.fill();   // the gold ball on top
+  ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+}
+
 // the smoke over the whole room, in world coords: a haze you can barely see through, with slow rolling clouds in it
 function drawSmoke() {
   if (smoke <= 0 && !smokePuffs.length) return;
@@ -1350,6 +1414,7 @@ function step() {
   }
   if (eggBanner && ++eggBanner.t > EGG_LEN) eggBanner = null;
   updateStash();
+  updateFlag();
   if (reveal && state === 'play') {
     if (reveal.t === 0) { sfx.thud(0.5); sfx.tone('sine', 110, 120, 1.2, 0.04); }   // door clunk and a fridge hum
     if (++reveal.t > REVEAL_LEN) reveal = null;
@@ -1588,6 +1653,7 @@ canvas.addEventListener('pointerdown', e => {
     updatePull(p);
     return;
   }
+  if (grabFlag(p)) return;
   if (laser && Math.hypot(p.x - laser.x, p.y - laser.y) < 55) { catchLaser(); return; }
   if (eggTap(p)) return;
   if (tapPortrait(p)) return;
@@ -1624,11 +1690,13 @@ let menuPointer = null;             // home screen: last finger/mouse spot, so t
 canvas.addEventListener('pointermove', e => {
   if (state === 'menu') menuPointer = { ...toUI(e), f: frame };
   if (mugGrab) { flickMug(e); return; }
+  if (flag.grab) { dragFlag(toWorld(e)); return; }
   if (dragging) updatePull(toWorld(e));
   else if (panning) { cam.x = clampCamX(panning.cx - (e.clientX - panning.sx) * dpr / worldScale); panIdle = 0; }
 });
 function release() {
   mugGrab = null; petHold = null;
+  if (flag.grab) { flag.grab = null; return; }
   if (panning) { panning = null; return; }
   if (!dragging) return;
   dragging = false;
@@ -3161,7 +3229,7 @@ function drawHUD() {
     const d = Math.hypot(pull.x, pull.y);
     hint = bandSnapped ? 'Oops! Let go and watch her plop...' : snapStrain > 0 ? "It's creaking! Ease off!" : d > SNAP_PULL * 0.85 ? 'Easy... she\'s really heavy!' : null;
   } else if (state === 'play' && phase === 'flying' && !powerUsed && flying[0] && !flying[0].game.done) {
-    hint = flying[0].game.snapped ? "We're gonna need a stronger slingshot!" : CATS[flying[0].game.type].hint;
+    hint = flying[0].game.snapped ? "We're gonna need a bigger slingshot!" : CATS[flying[0].game.type].hint;
   }
   if (hint) {
     ctx.font = `700 54px ${FONT}`;

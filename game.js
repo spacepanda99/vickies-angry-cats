@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 95;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 96;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -345,6 +345,7 @@ const sfx = {
     if (this.ac && this.ac.state === 'suspended') this.ac.resume();
     this.loadSample('win', 'jingle-win.ogg');
     this.loadSample('lose', 'jingle-lose.ogg');
+    this.loadSample('bong', 'sounds/bong.ogg');
     for (const n of catSoundFiles()) this.loadSample('cat:' + n, 'sounds/' + n + '.ogg');
   },
   ok() { return this.on && this.ac; },
@@ -649,6 +650,8 @@ let eggFlags = {}, bird = null, moonCat = 0, petHold = null, hairball = null, ha
 let perch = null, dangles = [];
 let eggBanner = null;               // the big 'you found an Easter egg' badge
 const EGG_LEN = 140;
+let cabinet = { k: 0, open: false };   // the cabinet's secret top doors (k: 0 shut .. 1 open)
+let stoned = null, smoke = 0, smokePuffs = [];   // after a bong hit: { base: score at launch } doubles the next shot; smoke 0..1 fills the room
 
 let knocksThisFrame = 0;
 let snapStrain = 0;               // frames CeCe has been held past the snap limit
@@ -776,6 +779,7 @@ function loadLevel(i) {
   settle = 90; score = 0; stars = 0; bonus = 0; snapTimer = 0; bandSnapped = false; snapStrain = 0;
   toRemove = []; particles = []; popups = [];
   sun = lv.sunbeam ? { x: lv.sunbeam.x + FORT_X, w: lv.sunbeam.w } : null; napCat = null; cucumberScare = false; eggBanner = null;
+  cabinet = { k: 0, open: false }; stoned = null; smoke = 0; smokePuffs = [];
   eggFlags = {}; hairCount = 0; hairball = null; petHold = null; moonCat = 0;
   perch = lv.perch ? { ...lv.perch, x: lv.perch.x + FORT_X } : null;
   dangles = (lv.dangles || []).map(d => ({ ...d, x: d.x + FORT_X, caught: false }));
@@ -927,6 +931,7 @@ function launch() {
   if (!sfx.cat(CAT_SOUNDS.launch[current], 0.7)) sfx.meow(current === 'baby' ? 1.25 : current === 'cece' ? 0.75 : 1);
   flying = [body]; current = null; phase = 'flying'; powerUsed = false; flyTimer = 0; shotRevealed = false;
   pull = { x: 0, y: 0 }; launchedOnce = true; snapStrain = 0;
+  if (stoned && stoned.base == null) stoned.base = score;   // a bong hit doubles this shot
 }
 
 function usePower() {
@@ -1172,6 +1177,61 @@ function tapPortrait(p) {
   [988, 1319, 1568].forEach((f, i) => sfx.tone('sine', f, f, 0.18, 0.06, i * 0.07));
   return true;
 }
+// The cabinet behind the slingshot: its top doors open on a bong and a bag of weed. Take a hit and the room fills with
+// smoke and the next shot scores double. Every shot, if you like; the doors shut again after the shot.
+function tapCabinet(p) {
+  const x = p.x - cam.x * (1 - MID_P), y = p.y, C = CABINET, B = C.bong;
+  if (x < C.x || x > C.x + C.w || y < C.y || y > C.y + C.h) return false;
+  if (!cabinet.open) { cabinet.open = true; sfx.tone('triangle', 190, 120, 0.3, 0.05); sfx.tone('sine', 420, 300, 0.12, 0.03, 0.18); return true; }   // a soft creak
+  if (cabinet.k < 0.9) return true;
+  if (x >= B.x && x <= B.x + B.w && y >= B.y) { hitBong(); return true; }
+  if (!stoned) cabinet.open = false;
+  return true;
+}
+function hitBong() {
+  if (stoned) return;
+  stoned = { base: phase === 'flying' ? score : null };   // mid-shot it counts for the shot in the air, else the next one
+  if (!sfx.playSample('bong', 0.8)) for (let i = 0; i < 14; i++) sfx.tone('sine', 140 + Math.random() * 90, 90, 0.09, 0.08, 0.3 + i * 0.09);   // bubbling
+  music.duck(5);
+  eggBanner = { title: 'Use your stoney Jedi skills!', sub: 'Points are doubled', pts: 0, t: 0 };
+}
+// the cat in the air (or the one about to go) has finished: double whatever the shot scored, then the smoke clears
+function settleStoned(pos) {
+  if (!stoned || stoned.base == null) return;
+  const gained = score - stoned.base;
+  stoned = null; cabinet.open = false;
+  if (gained > 0) { score += gained; popups.push({ x: pos.x, y: pos.y - 60, text: 'Stoney Jedi x2! +' + gained.toLocaleString(), life: 120, big: true }); }
+}
+function updateStash() {
+  cabinet.k = Math.max(0, Math.min(1, cabinet.k + (cabinet.open ? 1 : -1) / 18));
+  smoke = Math.max(0, Math.min(1, smoke + (stoned ? 1 / 300 : -1 / 140)));
+  // big soft clouds rolling out of the bong for the first few seconds
+  if (stoned && smoke < 0.6 && frame % 3 === 0) {
+    const bx = CABINET.bong.x + 30 + cam.x * (1 - MID_P);
+    smokePuffs.push({ x: bx + rand(-6, 6), y: CABINET.y + 14, vx: rand(0.4, 2.2), vy: rand(-1.2, 0.2), r: rand(20, 40), life: 240, max: 240 });
+  }
+  for (const s of smokePuffs) { s.x += s.vx; s.y += s.vy; s.vy += 0.004; s.r += 1.6; s.life--; }
+  smokePuffs = smokePuffs.filter(s => s.life > 0);
+}
+// the smoke over the whole room, in world coords: a haze you can barely see through, with slow rolling clouds in it
+function drawSmoke() {
+  if (smoke <= 0 && !smokePuffs.length) return;
+  const x0 = cam.x - 80, y0 = cam.y - 80, w = viewW + 160, h = VIEW_H + 200;
+  const cloud = (x, y, r, a) => {
+    const gr = ctx.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, `rgba(232,236,224,${a.toFixed(3)})`); gr.addColorStop(1, 'rgba(232,236,224,0)');
+    ctx.fillStyle = gr; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  if (smoke > 0) {
+    ctx.fillStyle = `rgba(206,212,198,${(0.84 * smoke).toFixed(3)})`; ctx.fillRect(x0, y0, w, h);
+    for (let i = 0; i < 12; i++) {
+      const r = 170 + (i % 4) * 55, span = w + r * 2;
+      const bx = x0 - r + ((i * 263 + frame * (0.25 + (i % 3) * 0.15)) % span), by = y0 + 40 + (i * 157) % h + Math.sin(frame * 0.012 + i) * 30;
+      cloud(bx, by, r, 0.55 * smoke);
+    }
+  }
+  for (const s of smokePuffs) cloud(s.x, s.y, s.r, 0.75 * Math.min(1, s.life / 60));
+}
 // taps on the window bird or the moon; true if it used the tap
 function eggTap(p) {
   if (bird && !bird.flee) {
@@ -1287,6 +1347,7 @@ function step() {
     if (++upBanner.t > BANNER_LEN) upBanner = null;
   }
   if (eggBanner && ++eggBanner.t > EGG_LEN) eggBanner = null;
+  updateStash();
   if (reveal && state === 'play') {
     if (reveal.t === 0) { sfx.thud(0.5); sfx.tone('sine', 110, 120, 1.2, 0.04); }   // door clunk and a fridge hum
     if (++reveal.t > REVEAL_LEN) reveal = null;
@@ -1425,6 +1486,7 @@ function updatePhase() {
     if (allDone && hasFridge() && !shotRevealed) { shotRevealed = true; startReveal(10); return; }
     if (allDone && reveal) return;
     if (allDone) {
+      settleStoned(flying[0].position);
       for (const c of flying) { if (c.position.y < H + 200 && !c.game.boxed) poof(c.position, 6, c.game.r / 26); Composite.remove(engine.world, c); }
       flying = [];
       if (queue.length) { current = queue.shift(); phase = 'aim'; panIdle = 999; upBanner = { type: current, t: 0 }; chatter = [{ type: current, who: 0, t: 8, life: CHATTER_LIFE, sym: '!' }]; }
@@ -1437,6 +1499,7 @@ function updatePhase() {
 
 let finale = null;                // after the last level: the level picker shows a congratulations ribbon
 function finishWin() {
+  settleStoned(flying.length ? flying[0].position : { x: fortCenter, y: 600 });
   const unused = queue.length + (current && phase === 'aim' ? 1 : 0);
   bonus = unused * 10000;
   score += bonus;
@@ -1526,6 +1589,7 @@ canvas.addEventListener('pointerdown', e => {
   if (laser && Math.hypot(p.x - laser.x, p.y - laser.y) < 55) { catchLaser(); return; }
   if (eggTap(p)) return;
   if (tapPortrait(p)) return;
+  if (tapCabinet(p)) return;
   if (phase !== 'flying') {
     const spots = queueSpots(), i = spots.findIndex(q => Math.hypot(p.x - q.x, p.y - q.y) < q.r + 10);
     if (i >= 0) { petCat(i, spots[i]); petHold = { who: i, t: 0 }; return; }
@@ -3124,7 +3188,7 @@ function drawEggBanner() {
   ctx.fillStyle = 'rgba(24,14,48,0.92)'; rr(-w / 2, -100, w, 200, 44); ctx.fill();
   ctx.lineWidth = 8; ctx.strokeStyle = '#ff8fb8'; ctx.stroke();
   text(eggBanner.title, 0, -30, 76, '#ffe14d', { font: tf, weight: 400, stroke: '#e8578f', strokeW: 10 });
-  text('+' + eggBanner.pts.toLocaleString() + (eggBanner.sub ? '  ' + eggBanner.sub : ''), 0, 50, 46, '#ffffff', { stroke: '#120a26', strokeW: 8 });
+  text((eggBanner.pts ? '+' + eggBanner.pts.toLocaleString() + '  ' : '') + (eggBanner.sub || ''), 0, 50, 46, '#ffffff', { stroke: '#120a26', strokeW: 8 });
   for (const sg of [-1, 1]) { ctx.save(); ctx.translate(sg * (w / 2 - 6), -96); ctx.rotate(t * 0.05 * sg); starShape(0, 0, 30, '#ffd23f', '#b8860b'); ctx.restore(); }
   ctx.restore();
 }
@@ -3712,9 +3776,11 @@ function render() {
   } else {
     ctx.setTransform(worldScale, 0, 0, worldScale, -cam.x * worldScale, -cam.y * worldScale);
     drawBackdrop(cam.x);
+    drawCabinetTop(cabinet.k, cam.x);
     const tod = levelTime(levelIdx);
     if (!isNight() && tod > 0.4) { ctx.fillStyle = `rgba(255,140,70,${(0.09 * (tod - 0.4) / 0.6).toFixed(3)})`; ctx.fillRect(cam.x - 50, BACKDROP.top, viewW + 100, BACKDROP.bottom - BACKDROP.top); }
     drawWorld();
+    drawSmoke();
     setUI();
     drawHUD();
     if (state === 'won') centred(drawWon);

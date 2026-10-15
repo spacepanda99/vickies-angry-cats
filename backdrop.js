@@ -201,22 +201,101 @@ function portraitCat(g, cx, cy, r, c) {
   g.lineCap = 'butt';
 }
 
+// The cabinet's top doors (world coords of the opening behind them). They look like any other cupboard, but tap them
+// and they swing open on a secret stash (an Easter egg: nothing hints that they open). k: 0 shut .. 1 wide open.
+const CABINET = { x: 52, y: 376, w: 206, h: 132, bong: { x: 76, y: 386, w: 70, h: 122 } };
+function cabinetDoor(g, x, y, w, h) {
+  g.fillStyle = '#b88c63'; g.fillRect(x + 2, y, w - 4, h);
+  g.fillStyle = '#c99f77'; g.fillRect(x + 14, y + 12, w - 28, h - 24);
+  g.strokeStyle = 'rgba(120,85,55,0.35)'; g.lineWidth = 2; g.strokeRect(x + 14, y + 12, w - 28, h - 24);
+}
+function paintCabinetTop(g, k) {
+  const { x, y, w, h } = CABINET, dw = w / 2;
+  if (k <= 0) {
+    for (const dx of [0, dw]) cabinetDoor(g, x + dx, y, dw, h);
+    g.fillStyle = '#e8d2a8'; blob(g, x + dw - 12, y + h / 2, 4); blob(g, x + dw + 12, y + h / 2, 4);   // knobs
+    return;
+  }
+  // inside: a dark cupboard with the stash on the floor of it
+  g.fillStyle = '#5c3f2b'; g.fillRect(x, y, w, h);
+  g.fillStyle = 'rgba(0,0,0,0.12)'; for (let bx = x + 26; bx < x + w; bx += 34) g.fillRect(bx, y, 3, h);
+  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x, y, w, 10);
+  g.fillStyle = '#7a5538'; g.fillRect(x, y + h - 6, w, 6);
+  paintBong(g, CABINET.bong.x + 30, y + h - 6);
+  paintStashBag(g, x + 118, y + h - 66, 70, 60);
+  // the doors swing out toward the room: foreshortened, their free edges a touch taller as they come nearer
+  const th = k * 1.4, grow = 7 * Math.sin(th);
+  for (const [hx, dir] of [[x, 1], [x + w, -1]]) {
+    const fx = hx + dir * dw * Math.cos(th), pt = (u, v) => [hx + (fx - hx) * u, y - grow * u + (h + 2 * grow * u) * v];
+    const quad = (u0, v0, u1, v1) => { g.beginPath(); for (const [u, v] of [[u0, v0], [u1, v0], [u1, v1], [u0, v1]]) g.lineTo(...pt(u, v)); g.closePath(); };
+    g.fillStyle = '#a97e57'; quad(0, 0, 1, 1); g.fill();
+    g.fillStyle = '#bb9068'; quad(0.13, 0.09, 0.87, 0.91); g.fill();
+    g.fillStyle = '#e8d2a8'; const [kx, ky] = pt(0.88, 0.5); blob(g, kx, ky, 3.5);
+    const e = 5 * Math.sin(th);
+    g.fillStyle = '#8a6342'; g.fillRect(dir > 0 ? fx : fx - e, y - grow, e, h + 2 * grow);   // the door's edge
+  }
+}
+// a glass bong standing on the cupboard floor at (cx, base)
+function paintBong(g, cx, base) {
+  const glass = 'rgba(160,225,215,0.6)', rim = 'rgba(235,255,250,0.95)';
+  g.lineWidth = 2; g.strokeStyle = rim; g.fillStyle = glass;
+  g.beginPath(); g.ellipse(cx, base - 18, 22, 18, 0, 0, 7); g.fill(); g.stroke();
+  g.fillStyle = 'rgba(80,165,140,0.65)'; g.beginPath(); g.ellipse(cx, base - 18, 22, 18, 0, 0.15, Math.PI - 0.15); g.fill();   // water
+  g.fillStyle = glass; g.beginPath();
+  g.moveTo(cx - 9, base - 34); g.lineTo(cx - 9, base - 98); g.lineTo(cx - 15, base - 112); g.lineTo(cx + 15, base - 112); g.lineTo(cx + 9, base - 98); g.lineTo(cx + 9, base - 34);
+  g.closePath(); g.fill(); g.stroke();
+  g.fillStyle = '#5fb37a'; g.fillRect(cx - 9, base - 70, 18, 5);                                   // a band of coloured glass
+  g.strokeStyle = 'rgba(255,255,255,0.8)'; g.beginPath(); g.moveTo(cx - 5, base - 40); g.lineTo(cx - 5, base - 96); g.stroke();
+  g.strokeStyle = rim; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx + 12, base - 22); g.lineTo(cx + 30, base - 40); g.stroke(); g.lineCap = 'butt';   // downstem
+  g.fillStyle = '#9aa6a4'; g.beginPath(); g.moveTo(cx + 22, base - 42); g.lineTo(cx + 42, base - 48); g.lineTo(cx + 35, base - 36); g.closePath(); g.fill();   // the bowl
+}
+// a little zip bag with a pot leaf printed on it, top-left corner at (x, y)
+function paintStashBag(g, x, y, w, h) {
+  g.fillStyle = '#efe7d0'; g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, 5); else g.rect(x, y, w, h); g.fill();
+  g.fillStyle = '#c64a4a'; g.fillRect(x, y + 5, w, 4);                                              // the zip
+  const cx = x + w / 2, cy = y + h - 12;
+  g.fillStyle = '#3f9a4a';
+  for (const [deg, len] of [[-90, 30], [-62, 25], [-118, 25], [-32, 18], [-148, 18], [-8, 11], [-172, 11]]) {
+    const a = deg * Math.PI / 180;
+    g.beginPath(); g.ellipse(cx + Math.cos(a) * len / 2, cy + Math.sin(a) * len / 2, len / 2, len * 0.15, a, 0, 7); g.fill();
+  }
+  g.fillRect(cx - 1, cy, 2, 7);
+}
+// the top of the cabinet while it's open (shut, it's just part of the furniture layer); hazed to match the furniture
+let cabinetCache = { k: -1, c: null };
+function drawCabinetTop(k, camX) {
+  if (k <= 0) return;
+  const { x, y, w, h } = CABINET, pad = 12, sc = 1.25;
+  if (cabinetCache.k !== k) {
+    const c = cabinetCache.c || document.createElement('canvas');
+    c.width = Math.round((w + pad * 2) * sc); c.height = Math.round((h + pad * 2) * sc);
+    const g = c.getContext('2d');
+    g.setTransform(sc, 0, 0, sc, 0, 0); g.translate(pad - x, pad - y);
+    paintCabinetTop(g, k);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(232,246,242,0.42)'; g.fillRect(0, 0, c.width, c.height);
+    g.globalCompositeOperation = 'source-over';
+    cabinetCache = { k, c };
+  }
+  ctx.drawImage(cabinetCache.c, x - pad + camX * (1 - MID_P), y - pad, w + pad * 2, h + pad * 2);
+}
+
 function buildMid() {
   const L = makeLayer(WORLD_W, 1.25), g = L.g;
   const F = GROUND;
-  // bookshelf
-  g.fillStyle = '#c99f77'; g.fillRect(40, 440, 230, F - 440);
-  g.fillStyle = '#b88c63';
-  for (let i = 0; i < 4; i++) g.fillRect(52, 455 + i * 92, 206, 80);
+  // tall cabinet: plain doors up top, an open shelf of books in the middle, more doors below
+  g.fillStyle = '#b88c63'; g.fillRect(32, 350, 246, 14);                 // cornice
+  g.fillStyle = '#c99f77'; g.fillRect(40, 364, 230, F - 364);
+  paintCabinetTop(g, 0);
+  g.fillStyle = '#b88c63'; g.fillRect(52, 522, 206, 110);                // the open shelf
   const bookColors = ['#f29e8e', '#8ec9e6', '#f6d27a', '#9fd3a8', '#c7a6e6', '#f7b7c8'];
-  for (let i = 0; i < 4; i++) {
-    let x = 58;
-    for (let k = 0; x < 245; k++) {
-      const w = 12 + hash(i * 31 + k) * 14, h = 50 + hash(i * 17 + k) * 22;
-      g.fillStyle = bookColors[(i * 3 + k) % bookColors.length];
-      g.fillRect(x, 455 + i * 92 + 80 - h, w, h); x += w + 3;
-    }
+  for (let x = 58, k = 0; x < 200; k++) {
+    const w = 12 + hash(31 + k) * 14, h = 54 + hash(17 + k) * 22;
+    g.fillStyle = bookColors[(3 + k) % bookColors.length];
+    g.fillRect(x, 632 - h, w, h); x += w + 3;
   }
+  g.fillStyle = '#e59d7f'; g.fillRect(218, 610, 26, 22); g.fillStyle = '#9fd3a8'; blob(g, 231, 598, 16);   // a little pot plant
+  for (const x of [52, 155]) cabinetDoor(g, x, 646, 103, F - 666);       // the lower doors (they stay shut)
   // floor lamp
   g.fillStyle = '#9aa6a4'; g.fillRect(372, 520, 8, F - 520); g.fillRect(350, F - 10, 52, 10);
   g.fillStyle = '#ffe3a6'; g.beginPath(); g.moveTo(330, 525); g.lineTo(422, 525); g.lineTo(404, 450); g.lineTo(348, 450); g.closePath(); g.fill();

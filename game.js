@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 88;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 89;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -3741,6 +3741,10 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+
+// Start the sound straight away. Browsers normally hold audio until the first tap, but Chrome on Android lets an
+// app that's been added to the home screen play at once. If it's still held, the first tap starts it as before.
+sfx.init();
 
 // canvas text only uses a web font once it has been asked for
 if (document.fonts) for (const f of ["40px Bangers", "40px Chewy", "700 40px 'Dancing Script'", "700 40px Fredoka", "40px 'Luckiest Guy'"]) document.fonts.load(f).catch(() => {});

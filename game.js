@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 87;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 88;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -3459,8 +3459,16 @@ function startIntro() {
   intro = { t: 0 }; state = 'intro';
   PORTRAITS_NOW = PORTRAIT_LEVELS[0]; setBackdropTime(0, PORTRAITS_NOW.join());
 }
+// The first time anyone plays, the cut scene leads straight into level 1. After that, PLAY goes to the level picker.
+const FIRST_KEY = 'vickiesAngryCats.introSeen';
+function firstTimePlaying() { try { return localStorage.getItem(FIRST_KEY) !== '1'; } catch (e) { return false; } }
 function endIntro() {
-  intro = null; state = 'levels';
+  const first = firstTimePlaying();
+  intro = null;
+  if (first) {
+    try { localStorage.setItem(FIRST_KEY, '1'); } catch (e) { /* private mode: just go on */ }
+    loadLevel(0);
+  } else state = 'levels';
 }
 const IG = GROUND - 35;                              // a raccoon standing on the floor
 const ISILL = 481;                                   // ... crouched on the window sill

@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 90;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 91;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -213,12 +213,15 @@ const LEVELS = [
   } },
   // CeCe goes last here: one shake on the floor crates set off the whole chain, so she's the closer
   { name: 'Catnip Kaboom', cats: ['baby', 'cleo', 'cece'], build(lv) {
-    const s1 = hut(lv, 1050, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1050, GROUND, false, true);
-    const w = hut(lv, 1050, s1, 120, 90, 'wood', 'wood'); coon(lv, 1050, s1); catnip(lv, 1050, w);
-    const s2 = hut(lv, 1330, GROUND, 170, 100, 'stone', 'stone'); coon(lv, 1330, GROUND, false, true);
-    coon(lv, 1300, s2); catnip(lv, 1385, s2);
-    catnip(lv, 930, GROUND); catnip(lv, 1190, GROUND); catnip(lv, 1450, GROUND);
-    cucumber(lv, 850);                                                      // who left that there?
+    // the catnip is locked away: one crate in a stone bunker between the forts, one on the right fort's roof.
+    // Break into the bunker (or hit the roof crate) to set off the blast; most raccoons wear helmets, so it
+    // takes a well-placed explosion plus a good follow-up, not one lucky shot
+    const s1 = hut(lv, 980, GROUND, 150, 110, 'stone', 'stone'); coon(lv, 980, GROUND, false, true);
+    hut(lv, 980, s1, 120, 90, 'wood', 'glass'); coon(lv, 980, s1);
+    hut(lv, 1170, GROUND, 110, 70, 'stone', 'stone'); catnip(lv, 1170, GROUND);
+    const s2 = hut(lv, 1360, GROUND, 150, 110, 'stone', 'stone'); coon(lv, 1360, GROUND, false, true);
+    const w2 = hut(lv, 1360, s2, 120, 90, 'wood', 'glass'); coon(lv, 1360, s2, false, true); catnip(lv, 1360, w2);
+    cucumber(lv, 830);                                                      // who left that there?
   } },
   // The boss up on the shelf is a cardboard decoy; the real one hides on the floor underneath. Only a
   // shake from CeCe, rolled right up against him, takes him out, so she goes first while the lane is clear.

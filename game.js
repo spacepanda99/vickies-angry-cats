@@ -17,7 +17,7 @@ const POWER = 0.18;                        // launch speed per unit of pull
 const STEP = 1000 / 60;
 const GRAV_STEP = 0.001 * STEP * STEP;     // Matter's per-step gravity at gravity.y = 1
 const MAX_SPEED = 26;                      // keeps fast cats from passing through thin blocks
-const GAME_VERSION = 103;                   // bump with each release (matches the sw.js cache name)
+const GAME_VERSION = 104;                   // bump with each release (matches the sw.js cache name)
 const FONT = "Fredoka, 'Trebuchet MS', 'Segoe UI', sans-serif";
 
 const canvas = document.getElementById('game');
@@ -1222,7 +1222,7 @@ function updateStash() {
 // of the yellow stripe at the window's left edge, just above the cabinet (low enough not to pull down a phone's quick
 // menu); now and then the pole sways a little to catch your eye. Grab the corner and pull: the pole bends over to the
 // right and the whole flag comes into view. Let go and it springs back.
-const UKR = { bx: 265, by: 620, L: 340, a0: -120 * Math.PI / 180, fh: 90, fw: 135, full: 90 * Math.PI / 180 };
+const UKR = { bx: 268, by: 622, L: 340, a0: -120 * Math.PI / 180, fh: 90, fw: 135, full: 90 * Math.PI / 180 };
 function flagShape(phi, wave = 0) {
   const N = 40, pole = [[UKR.bx, UKR.by]];
   let x = UKR.bx, y = UKR.by;
